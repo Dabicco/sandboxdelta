@@ -7640,7 +7640,7 @@ function explodeNukeBomb(cx, cy){
     }
     
     // Function to fetch community saves from the ./communitysaves directory
-    async function fetchCommunitySaves() {
+    window.fetchCommunitySaves = async function() {
       // In a real implementation, this would fetch from the server or local directory
       // For now, we'll simulate reading from a directory
       
@@ -7687,7 +7687,7 @@ function explodeNukeBomb(cx, cy){
     }
     
     // Function to load a community save
-    function loadCommunitySave(filename) {
+    window.loadCommunitySave = function(filename) {
       // In a real implementation, this would fetch the save file from the server or local directory
       // For now, we'll simulate loading from a file
       
@@ -7715,7 +7715,7 @@ function explodeNukeBomb(cx, cy){
     }
     
     // Function to update the community saves list in the UI
-    function updateCommunitySavesList() {
+    window.updateCommunitySavesList = function() {
       const container = document.getElementById('communitySavesList');
       container.innerHTML = '<div class="loading">Loading community saves...</div>';
       
@@ -7859,7 +7859,7 @@ function explodeNukeBomb(cx, cy){
     }
     
     // Helper function to get sample community saves for demo purposes
-    function getSampleCommunitySaves() {
+    window.getSampleCommunitySaves = function() {
       // Create some sample saves for demonstration
       return [
         {
@@ -7893,7 +7893,7 @@ function explodeNukeBomb(cx, cy){
     }
     
     // Helper function to create sample save data for demo purposes
-    function createSampleSaveData(size, theme) {
+    window.createSampleSaveData = function(size, theme) {
       // Create a basic grid with the specified theme
       const grid = Array(size).fill().map(() => Array(size).fill(0));
       const temp = Array(size).fill().map(() => Array(size).fill(20));
