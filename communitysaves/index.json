@@ -1,10 +1,10 @@
 [
   {
-    "id": "save_001",
-    "title": "Dabicco's Creation",
-    "description": "An amazing sandbox creation by the game's creator.",
-    "author": "Dabicco",
-    "date": "2025-05-11T02:07:44-04:00",
-    "mapSize": "50x50"
+    "filename": "dabicco-1.dbr",
+    "title": "Example Community Save",
+    "description": "Community Save Example- Chill.",
+    "publisher": "Dabicco",
+    "timestamp": 1714532400000,
+    "size": 15240
   }
 ]

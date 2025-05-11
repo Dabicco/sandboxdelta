@@ -355,10 +355,10 @@
     }
     #clearAllBtn:hover { background-color: #555; }
     /* Extra Sidebar Buttons */
-    #optionsButtonContainer, #saveLoadButtonContainer, #modButtonContainer {
+    #optionsButtonContainer, #saveLoadButtonContainer, #modButtonContainer, #communityButtonContainer {
       text-align: center;
     }
-    #optionsButton, #saveLoadButton, #modButton {
+    #optionsButton, #saveLoadButton, #modButton, #communityButton {
       background-color: #444;
       border: 1px solid #888;
       border-radius: 3px;
@@ -367,7 +367,7 @@
       cursor: pointer;
       margin: 5px;
     }
-    #optionsButton:hover, #saveLoadButton:hover, #modButton:hover {
+    #optionsButton:hover, #saveLoadButton:hover, #modButton:hover, #communityButton:hover {
       background-color: #555;
     }
     /* Mod Manager Modal styles */
@@ -438,6 +438,120 @@
       cursor: pointer;
     }
     .modal button:hover {
+      background-color: #555;
+    }
+    
+    /* Community saves styles */
+    #communitySavesList {
+      max-height: 400px;
+      overflow-y: auto;
+      margin-bottom: 15px;
+    }
+    
+    #communitySavesList .loading,
+    #communitySavesList .no-saves,
+    #communitySavesList .error {
+      padding: 10px;
+      text-align: center;
+      color: #ddd;
+    }
+    
+    #communitySavesList .error {
+      color: #ff6b6b;
+    }
+    
+    .save-metadata {
+      display: flex;
+      flex-wrap: wrap;
+      font-size: 0.8em;
+      color: #aaa;
+      margin-top: 5px;
+    }
+    
+    .save-metadata > div {
+      margin-right: 10px;
+    }
+    
+    .save-publisher {
+      font-style: italic;
+    }
+    
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      grid-template-rows: repeat(10, 1fr);
+      width: 100px;
+      height: 100px;
+      background-color: #222;
+      border: 1px solid #444;
+    }
+    
+    .preview-cell {
+      width: 100%;
+      height: 100%;
+      background-color: #000;
+    }
+    
+    .preview-error {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100px;
+      height: 100px;
+      background-color: #333;
+      color: #ff6b6b;
+      font-size: 0.8em;
+      text-align: center;
+    }
+    
+    .save-game-card {
+      display: flex;
+      background-color: #333;
+      border: 1px solid #555;
+      border-radius: 5px;
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+    
+    .save-preview {
+      flex: 0 0 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #222;
+    }
+    
+    .save-info {
+      flex: 1;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .save-title {
+      font-weight: bold;
+      font-size: 1.1em;
+      margin-bottom: 5px;
+    }
+    
+    .save-description {
+      color: #ccc;
+      margin-bottom: 10px;
+      font-size: 0.9em;
+    }
+    
+    .load-save-button {
+      align-self: flex-end;
+      margin-top: auto;
+      background-color: #444;
+      border: 1px solid #888;
+      border-radius: 3px;
+      color: #fff;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    
+    .load-save-button:hover {
       background-color: #555;
     }
     /* Styles for mod cards in the mod menu */
@@ -1963,13 +2077,11 @@
       <div id="saveLoadButtonContainer">
         <button id="saveLoadButton">Save/Load</button>
       </div>
-      <!-- Mod Manager Button -->
-      <div id="modButtonContainer">
-        <button id="modButton">Mods (Alpha)</button>
-      </div>
-      <!-- Community Button -->
       <div id="communityButtonContainer">
         <button id="communityButton">Community</button>
+      </div>
+      <div id="modButtonContainer">
+        <button id="modButton">Mods</button>
       </div>
     </div>
   </div>
@@ -7394,6 +7506,521 @@ function explodeNukeBomb(cx, cy){
     
     // Helper Functions
     
+    // Community saves functionality
+    function updateCommunitySavesList() {
+      const container = document.getElementById('communitySavesList');
+      container.innerHTML = '<div class="loading">Loading community saves...</div>';
+      
+      // Fetch the list of community saves from the ./communitysaves directory
+      fetchCommunitySaves()
+        .then(saves => {
+          container.innerHTML = '';
+          
+          if (saves.length === 0) {
+            container.innerHTML = '<div class="no-saves">No community saves found.</div>';
+            return;
+          }
+          
+          // Sort saves by date (newest first)
+          saves.sort((a, b) => b.timestamp - a.timestamp);
+          
+          // Create a card for each community save
+          saves.forEach(save => {
+            // Create a card for each saved game
+            const card = document.createElement('div');
+            card.className = 'save-game-card';
+            
+            // Create the preview section
+            const previewContainer = document.createElement('div');
+            previewContainer.className = 'save-preview';
+            
+            // Create the actual preview grid
+            const previewGrid = document.createElement('div');
+            previewGrid.className = 'preview-grid';
+            
+            // Try to load the save data to create a preview
+            try {
+              // Parse the save data
+              const saveData = save.saveData;
+              const previewSize = 10; // Small preview grid
+              
+              // Create a miniature grid for preview
+              for (let y = 0; y < previewSize; y++) {
+                for (let x = 0; x < previewSize; x++) {
+                  const cell = document.createElement('div');
+                  cell.className = 'preview-cell';
+                  
+                  // Sample from the actual grid to create preview
+                  const gridX = Math.floor(x * (saveData.GRID_SIZE / previewSize));
+                  const gridY = Math.floor(y * (saveData.GRID_SIZE / previewSize));
+                  
+                  if (saveData.grid && saveData.grid[gridY] && saveData.grid[gridY][gridX] !== undefined) {
+                    const element = saveData.grid[gridY][gridX];
+                    if (element !== 0) { // Not empty
+                      // Get the class name for this element
+                      const elementClass = getElementClass(element);
+                      if (elementClass) {
+                        cell.classList.add(elementClass);
+                      }
+                    }
+                  }
+                  
+                  previewGrid.appendChild(cell);
+                }
+              }
+              
+              previewContainer.appendChild(previewGrid);
+            } catch (err) {
+              console.error('Error creating preview:', err);
+              previewContainer.innerHTML = '<div class="preview-error">Preview not available</div>';
+            }
+            
+            // Create the info section
+            const infoContainer = document.createElement('div');
+            infoContainer.className = 'save-info';
+            
+            // Add title
+            const title = document.createElement('div');
+            title.className = 'save-title';
+            title.textContent = save.title || 'Untitled Save';
+            infoContainer.appendChild(title);
+            
+            // Add description
+            const description = document.createElement('div');
+            description.className = 'save-description';
+            description.textContent = save.description || 'No description';
+            infoContainer.appendChild(description);
+            
+            // Add metadata (publisher and date)
+            const metadata = document.createElement('div');
+            metadata.className = 'save-metadata';
+            
+            // Add publisher
+            const publisher = document.createElement('div');
+            publisher.className = 'save-publisher';
+            publisher.textContent = `Publisher: ${save.publisher || 'Unknown'}`;
+            metadata.appendChild(publisher);
+            
+            // Add date
+            const date = document.createElement('div');
+            date.className = 'save-date';
+            date.textContent = `Date: ${new Date(save.timestamp).toLocaleDateString()}`;
+            metadata.appendChild(date);
+            
+            // Add file size
+            const size = document.createElement('div');
+            size.className = 'save-size';
+            size.textContent = `Size: ${formatFileSize(save.size)}`;
+            metadata.appendChild(size);
+            
+            infoContainer.appendChild(metadata);
+            
+            // Add load button
+            const loadButton = document.createElement('button');
+            loadButton.className = 'load-save-button';
+            loadButton.textContent = 'Load';
+            loadButton.addEventListener('click', function() {
+              loadCommunitySave(save.filename);
+              communityModal.style.display = 'none';
+            });
+            infoContainer.appendChild(loadButton);
+            
+            // Assemble the card
+            card.appendChild(previewContainer);
+            card.appendChild(infoContainer);
+            
+            // Add the card to the container
+            container.appendChild(card);
+          });
+        })
+        .catch(error => {
+          console.error('Error loading community saves:', error);
+          container.innerHTML = `<div class="error">Error loading community saves: ${error.message}</div>`;
+        });
+    }
+    
+    // Function to fetch community saves from the ./communitysaves directory
+    async function fetchCommunitySaves() {
+      // In a real implementation, this would fetch from the server or local directory
+      // For now, we'll simulate reading from a directory
+      
+      try {
+        // Simulate reading from the ./communitysaves directory
+        // In a real implementation, this would use fetch or another method to get the files
+        const response = await fetch('./communitysaves/index.json');
+        
+        // If the directory doesn't exist or there's an error, return an empty array
+        if (!response.ok) {
+          return [];
+        }
+        
+        // Parse the index file that contains metadata about all community saves
+        const index = await response.json();
+        
+        // For each save in the index, fetch the actual save data
+        const saves = await Promise.all(index.map(async (save) => {
+          try {
+            const saveResponse = await fetch(`./communitysaves/${save.filename}`);
+            if (!saveResponse.ok) {
+              throw new Error(`Failed to load save: ${save.filename}`);
+            }
+            
+            const saveData = await saveResponse.json();
+            
+            return {
+              ...save,
+              saveData
+            };
+          } catch (error) {
+            console.error(`Error loading save ${save.filename}:`, error);
+            return save; // Return just the metadata if we can't load the save data
+          }
+        }));
+        
+        return saves;
+      } catch (error) {
+        console.error('Error fetching community saves:', error);
+        
+        // For demo purposes, return some sample saves if we can't fetch the real ones
+        return getSampleCommunitySaves();
+      }
+    }
+    
+    // Function to load a community save
+    function loadCommunitySave(filename) {
+      // In a real implementation, this would fetch the save file from the server or local directory
+      // For now, we'll simulate loading from a file
+      
+      fetch(`./communitysaves/${filename}`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`Failed to load save: ${filename}`);
+          }
+          return response.json();
+        })
+        .then(save => {
+          // Load the save data into the game
+          loadSaveData(save);
+        })
+        .catch(error => {
+          console.error('Error loading community save:', error);
+          alert(`Error loading community save: ${error.message}`);
+          
+          // For demo purposes, load a sample save if we can't load the real one
+          const sampleSaves = getSampleCommunitySaves();
+          if (sampleSaves.length > 0) {
+            loadSaveData(sampleSaves[0].saveData);
+          }
+        });
+    }
+    
+    // Function to update the community saves list in the UI
+    function updateCommunitySavesList() {
+      const container = document.getElementById('communitySavesList');
+      container.innerHTML = '<div class="loading">Loading community saves...</div>';
+      
+      // Fetch the list of community saves from the ./communitysaves directory
+      fetchCommunitySaves()
+        .then(saves => {
+          container.innerHTML = '';
+          
+          if (saves.length === 0) {
+            container.innerHTML = '<div class="no-saves">No community saves found.</div>';
+            return;
+          }
+          
+          // Sort saves by date (newest first)
+          saves.sort((a, b) => b.timestamp - a.timestamp);
+          
+          // Create a card for each community save
+          saves.forEach(save => {
+            // Create a card for each saved game
+            const card = document.createElement('div');
+            card.className = 'save-game-card';
+            
+            // Create the preview section
+            const previewContainer = document.createElement('div');
+            previewContainer.className = 'save-preview';
+            
+            // Create the actual preview grid
+            const previewGrid = document.createElement('div');
+            previewGrid.className = 'preview-grid';
+            
+            // Try to load the save data to create a preview
+            try {
+              // Parse the save data
+              const saveData = save.saveData;
+              const previewSize = 10; // Small preview grid
+              
+              // Create a miniature grid for preview
+              for (let y = 0; y < previewSize; y++) {
+                for (let x = 0; x < previewSize; x++) {
+                  const cell = document.createElement('div');
+                  cell.className = 'preview-cell';
+                  
+                  // Sample from the actual grid to create preview
+                  const gridX = Math.floor(x * (saveData.GRID_SIZE / previewSize));
+                  const gridY = Math.floor(y * (saveData.GRID_SIZE / previewSize));
+                  
+                  if (saveData.grid && saveData.grid[gridY] && saveData.grid[gridY][gridX] !== undefined) {
+                    const element = saveData.grid[gridY][gridX];
+                    if (element !== 0) { // Not empty
+                      // Get the class name for this element
+                      const elementClass = getElementClass(element);
+                      if (elementClass) {
+                        cell.classList.add(elementClass);
+                      }
+                    }
+                  }
+                  
+                  previewGrid.appendChild(cell);
+                }
+              }
+              
+              previewContainer.appendChild(previewGrid);
+            } catch (err) {
+              console.error('Error creating preview:', err);
+              previewContainer.innerHTML = '<div class="preview-error">Preview not available</div>';
+            }
+            
+            // Create the info section
+            const infoContainer = document.createElement('div');
+            infoContainer.className = 'save-info';
+            
+            // Add title
+            const title = document.createElement('div');
+            title.className = 'save-title';
+            title.textContent = save.title || 'Untitled Save';
+            infoContainer.appendChild(title);
+            
+            // Add description
+            const description = document.createElement('div');
+            description.className = 'save-description';
+            description.textContent = save.description || 'No description';
+            infoContainer.appendChild(description);
+            
+            // Add metadata (publisher and date)
+            const metadata = document.createElement('div');
+            metadata.className = 'save-metadata';
+            
+            // Add publisher
+            const publisher = document.createElement('div');
+            publisher.className = 'save-publisher';
+            publisher.textContent = `Publisher: ${save.publisher || 'Unknown'}`;
+            metadata.appendChild(publisher);
+            
+            // Add date
+            const date = document.createElement('div');
+            date.className = 'save-date';
+            date.textContent = `Date: ${new Date(save.timestamp).toLocaleDateString()}`;
+            metadata.appendChild(date);
+            
+            // Add file size
+            const size = document.createElement('div');
+            size.className = 'save-size';
+            size.textContent = `Size: ${formatFileSize(save.size)}`;
+            metadata.appendChild(size);
+            
+            infoContainer.appendChild(metadata);
+            
+            // Add load button
+            const loadButton = document.createElement('button');
+            loadButton.className = 'load-save-button';
+            loadButton.textContent = 'Load';
+            loadButton.addEventListener('click', function() {
+              loadCommunitySave(save.filename);
+              communityModal.style.display = 'none';
+            });
+            infoContainer.appendChild(loadButton);
+            
+            // Assemble the card
+            card.appendChild(previewContainer);
+            card.appendChild(infoContainer);
+            
+            // Add the card to the container
+            container.appendChild(card);
+          });
+        })
+        .catch(error => {
+          console.error('Error loading community saves:', error);
+          container.innerHTML = `<div class="error">Error loading community saves: ${error.message}</div>`;
+        });
+    }
+    
+    // Helper function to format file size
+    function formatFileSize(bytes) {
+      if (bytes < 1024) {
+        return bytes + ' B';
+      } else if (bytes < 1024 * 1024) {
+        return (bytes / 1024).toFixed(1) + ' KB';
+      } else {
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      }
+    }
+    
+    // Helper function to get sample community saves for demo purposes
+    function getSampleCommunitySaves() {
+      // Create some sample saves for demonstration
+      return [
+        {
+          filename: 'sample1.dbr',
+          title: 'Desert Oasis',
+          description: 'A beautiful desert oasis with water and plants',
+          publisher: 'SandboxMaster',
+          timestamp: Date.now() - 86400000 * 3, // 3 days ago
+          size: 15240,
+          saveData: createSampleSaveData(50, 'desert')
+        },
+        {
+          filename: 'sample2.dbr',
+          title: 'Volcano Eruption',
+          description: 'Watch out for the lava!',
+          publisher: 'LavaLover',
+          timestamp: Date.now() - 86400000 * 7, // 7 days ago
+          size: 18360,
+          saveData: createSampleSaveData(50, 'volcano')
+        },
+        {
+          filename: 'sample3.dbr',
+          title: 'Underwater City',
+          description: 'A city built entirely underwater',
+          publisher: 'NeptuneKing',
+          timestamp: Date.now() - 86400000 * 14, // 14 days ago
+          size: 22480,
+          saveData: createSampleSaveData(50, 'underwater')
+        }
+      ];
+    }
+    
+    // Helper function to create sample save data for demo purposes
+    function createSampleSaveData(size, theme) {
+      // Create a basic grid with the specified theme
+      const grid = Array(size).fill().map(() => Array(size).fill(0));
+      const temp = Array(size).fill().map(() => Array(size).fill(20));
+      const colorVariations = Array(size).fill().map(() => Array(size).fill(null));
+      
+      // Fill the grid based on the theme
+      if (theme === 'desert') {
+        // Create a desert landscape with sand and a small oasis
+        for (let y = 0; y < size; y++) {
+          for (let x = 0; x < size; x++) {
+            if (y > size / 2) {
+              grid[y][x] = 4; // Sand
+              temp[y][x] = 30; // Hot temperature
+            }
+          }
+        }
+        
+        // Add an oasis in the center
+        const centerX = Math.floor(size / 2);
+        const centerY = Math.floor(size / 2);
+        const oasisRadius = Math.floor(size / 10);
+        
+        for (let y = centerY - oasisRadius; y <= centerY + oasisRadius; y++) {
+          for (let x = centerX - oasisRadius; x <= centerX + oasisRadius; x++) {
+            if (y >= 0 && y < size && x >= 0 && x < size) {
+              const distance = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+              if (distance < oasisRadius) {
+                grid[y][x] = 2; // Water
+                temp[y][x] = 20; // Normal temperature
+              }
+            }
+          }
+        }
+      } else if (theme === 'volcano') {
+        // Create a volcano landscape with stone and lava
+        for (let y = 0; y < size; y++) {
+          for (let x = 0; x < size; x++) {
+            if (y > size / 2) {
+              grid[y][x] = 5; // Stone
+              temp[y][x] = 20; // Normal temperature
+            }
+          }
+        }
+        
+        // Add a volcano in the center
+        const centerX = Math.floor(size / 2);
+        const centerY = Math.floor(size / 2);
+        const volcanoRadius = Math.floor(size / 8);
+        
+        for (let y = centerY - volcanoRadius; y <= centerY + volcanoRadius; y++) {
+          for (let x = centerX - volcanoRadius; x <= centerX + volcanoRadius; x++) {
+            if (y >= 0 && y < size && x >= 0 && x < size) {
+              const distance = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+              if (distance < volcanoRadius) {
+                grid[y][x] = 3; // Lava
+                temp[y][x] = 1200; // Very hot temperature
+              }
+            }
+          }
+        }
+      } else if (theme === 'underwater') {
+        // Create an underwater landscape with water and some structures
+        for (let y = 0; y < size; y++) {
+          for (let x = 0; x < size; x++) {
+            grid[y][x] = 2; // Water
+            temp[y][x] = 10; // Cold temperature
+          }
+        }
+        
+        // Add some underwater structures
+        for (let i = 0; i < 5; i++) {
+          const structX = Math.floor(Math.random() * size);
+          const structY = Math.floor(Math.random() * size);
+          const structSize = Math.floor(Math.random() * 5) + 3;
+          
+          for (let y = structY - structSize; y <= structY + structSize; y++) {
+            for (let x = structX - structSize; x <= structX + structSize; x++) {
+              if (y >= 0 && y < size && x >= 0 && x < size) {
+                const distance = Math.sqrt(Math.pow(x - structX, 2) + Math.pow(y - structY, 2));
+                if (distance < structSize) {
+                  grid[y][x] = 5; // Stone
+                  temp[y][x] = 10; // Cold temperature
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      // Return the sample save data
+      return {
+        GRID_SIZE: size,
+        grid,
+        temp,
+        colorVariations,
+        // Add other necessary properties with default values
+        vaporLife: Array(size).fill().map(() => Array(size).fill(0)),
+        cloudLife: Array(size).fill().map(() => Array(size).fill(0)),
+        fireLife: Array(size).fill().map(() => Array(size).fill(0)),
+        smokeLife: Array(size).fill().map(() => Array(size).fill(0)),
+        burningWoodTime: Array(size).fill().map(() => Array(size).fill(0)),
+        wheatHeight: Array(size).fill().map(() => Array(size).fill(0)),
+        wheatMaxHeight: Array(size).fill().map(() => Array(size).fill(3)),
+        seedGrowthTime: Array(size).fill().map(() => Array(size).fill(0)),
+        rootLife: Array(size).fill().map(() => Array(size).fill(0)),
+        sparkLife: Array(size).fill().map(() => Array(size).fill(0)),
+        sparkTimer: Array(size).fill().map(() => Array(size).fill(0)),
+        smokeMaxLife: Array(size).fill().map(() => Array(size).fill(30)),
+        cloudMaxLife: Array(size).fill().map(() => Array(size).fill(100)),
+        branchLevel: Array(size).fill().map(() => Array(size).fill(0)),
+        branchLen: Array(size).fill().map(() => Array(size).fill(0)),
+        branchMaxArr: Array(size).fill().map(() => Array(size).fill(0)),
+        branchSubCount: Array(size).fill().map(() => Array(size).fill(0)),
+        branchDirX: Array(size).fill().map(() => Array(size).fill(0)),
+        branchDirY: Array(size).fill().map(() => Array(size).fill(0)),
+        oakTreeGrowthTime: Array(size).fill().map(() => Array(size).fill(0)),
+        oakTreeHeight: Array(size).fill().map(() => Array(size).fill(0)),
+        oakTreeMaxHeight: Array(size).fill().map(() => Array(size).fill(10)),
+        oakTreeRootTimer: Array(size).fill().map(() => Array(size).fill(0)),
+        oakTreeRootDepth: Array(size).fill().map(() => Array(size).fill(0)),
+        oakTreeRootMax: Array(size).fill().map(() => Array(size).fill(5)),
+        grassStage: Array(size).fill().map(() => Array(size).fill(0)),
+        burningGasTime: Array(size).fill().map(() => Array(size).fill(0)),
+        chargedStateTime: Array(size).fill().map(() => Array(size).fill(0))
+      };
+    }
+    
     // Show login message
     function showLoginMessage(message, type) {
       communityLoginMessage.textContent = message;
@@ -7958,6 +8585,20 @@ function explodeNukeBomb(cx, cy){
     </div>
   </div>
 
+  <!-- Community Saves Modal -->
+  <div id="communityModal" class="modal">
+    <div class="modal-content">
+      <span id="closeCommunityModal" class="close">&times;</span>
+      <h2>Community Saves</h2>
+      <div>
+        <h3>Browse Community Saves</h3>
+        <div id="communitySavesList">
+          <!-- List of community saves will appear here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     // Global mods list
     const modsList = [];
@@ -8296,6 +8937,23 @@ function explodeNukeBomb(cx, cy){
     window.addEventListener('click', function(event) {
       if (event.target == saveLoadModal) {
         saveLoadModal.style.display = 'none';
+      }
+    });
+    
+    // Community menu functionality
+    const communityButton = document.getElementById('communityButton');
+    const communityModal = document.getElementById('communityModal');
+    const closeCommunityModal = document.getElementById('closeCommunityModal');
+    communityButton.addEventListener('click', function() {
+      communityModal.style.display = 'block';
+      updateCommunitySavesList();
+    });
+    closeCommunityModal.addEventListener('click', function() {
+      communityModal.style.display = 'none';
+    });
+    window.addEventListener('click', function(event) {
+      if (event.target == communityModal) {
+        communityModal.style.display = 'none';
       }
     });
     function getSaveIndex() {
