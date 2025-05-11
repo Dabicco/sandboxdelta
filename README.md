@@ -29,7 +29,7 @@ The Community section allows players to:
 
 ## Getting Started
 
-1. Visit [Sandbox Delta](https://breadgames.online/sandbox_delta.html) in your web browser
+1. Visit [Sandbox Delta](https://sandbox.breadgames.online/) in your web browser
 2. Use the tools in the sidebar to start building
 3. Experiment with different materials and physics settings
 4. Save your creation using the Save button
