@@ -1372,16 +1372,24 @@
       overflow: hidden;
       margin-bottom: 15px;
       position: relative;
-      padding: 10px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     
     .preview-grid {
       display: grid;
-      width: 100%;
-      height: 100%;
+      width: 200px;
+      height: 200px;
       grid-template-columns: repeat(20, 1fr);
       grid-template-rows: repeat(20, 1fr);
-      gap: 1px;
+      gap: 0;
+    }
+    
+    .preview-grid > div {
+      width: 100%;
+      height: 100%;
     }
     
     .no-preview-message {
@@ -1404,7 +1412,7 @@
       color: #777;
     }
     
-    .load-selected-btn {
+    .add-selected-btn {
       width: 100%;
       padding: 10px;
       background-color: #4CAF50;
@@ -1415,9 +1423,31 @@
       font-weight: bold;
     }
     
-    .load-selected-btn:disabled {
+    .add-selected-btn:disabled {
       background-color: #cccccc;
       cursor: not-allowed;
+    }
+    
+    .community-notification {
+      margin-top: 10px;
+      padding: 10px;
+      background-color: #f8f8d7;
+      border: 1px solid #e6e600;
+      border-radius: 4px;
+      color: #333;
+      text-align: center;
+      font-weight: bold;
+    }
+    
+    .highlight-menu {
+      animation: pulse-gold 2s;
+      box-shadow: 0 0 0 4px gold;
+    }
+    
+    @keyframes pulse-gold {
+      0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(255, 215, 0, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0); }
     }
     
     .community-save-item {
@@ -2284,51 +2314,93 @@
           }
         }
         
-        // Enable the load button and set up its click handler
-        if (loadSelectedBtn) {
-          loadSelectedBtn.disabled = false;
+        // Enable the add button and set up its click handler
+        const addSelectedBtn = document.getElementById('communityAddSelectedBtn');
+        if (addSelectedBtn) {
+          addSelectedBtn.disabled = false;
           
           // Remove any existing event listeners (to prevent duplicates)
-          const newLoadBtn = loadSelectedBtn.cloneNode(true);
-          loadSelectedBtn.parentNode.replaceChild(newLoadBtn, loadSelectedBtn);
+          const newAddBtn = addSelectedBtn.cloneNode(true);
+          addSelectedBtn.parentNode.replaceChild(newAddBtn, addSelectedBtn);
           
           // Add new event listener
-          newLoadBtn.addEventListener('click', function() {
-            loadCommunitySave(save.id);
+          newAddBtn.addEventListener('click', function() {
+            addCommunityToLocalSaves(save);
           });
         }
       }
       
-      // Function to load a specific community save
-      async function loadCommunitySave(saveId) {
+      // Function to add a community save to local saves
+      function addCommunityToLocalSaves(save) {
         try {
-          // Always use the fallback save for now since we're not actually loading from a server
-          // This ensures the save will always load properly
-          console.log('Loading community save:', saveId);
+          console.log('Adding community save to local saves:', save.id);
           
           // Create a fallback save with a pattern based on the save ID
-          const fallbackSave = createFallbackSave(saveId);
+          const saveData = createFallbackSave(save.id);
           
-          // Use the existing loadSave function to load the save data
-          // First check if it exists and how it should be called
-          if (typeof loadSaveFromString === 'function') {
-            // If the game has a loadSaveFromString function, use that
-            loadSaveFromString(fallbackSave);
-          } else if (typeof loadSave === 'function') {
-            // Otherwise use the standard loadSave function
-            loadSave(fallbackSave);
-          } else {
-            // If neither exists, try to parse the save and apply it manually
-            console.log('Applying save data manually');
-            applySaveDataManually(fallbackSave);
+          // Create a unique key for the local storage
+          const timestamp = new Date().getTime();
+          const saveKey = `sandboxdelta_save_${timestamp}`;
+          
+          // Create a save object similar to the local saves
+          const saveObject = {
+            title: save.title,
+            description: save.description,
+            author: save.author,
+            date: new Date().toISOString(),
+            GRID_SIZE: parseInt(save.mapSize) || 50,
+            saveData: saveData
+          };
+          
+          // Store the save in local storage
+          localStorage.setItem(saveKey, JSON.stringify(saveObject));
+          
+          // Show notification
+          const notification = document.getElementById('communityNotification');
+          if (notification) {
+            notification.style.display = 'block';
+            
+            // Hide notification after 5 seconds
+            setTimeout(() => {
+              notification.style.display = 'none';
+            }, 5000);
           }
           
-          // Close the community modal
-          communityModal.style.display = 'none';
+          // Highlight the save/load menu button
+          const saveLoadButton = document.querySelector('#saveButton');
+          if (saveLoadButton) {
+            saveLoadButton.classList.add('highlight-menu');
+            
+            // Remove highlight after animation completes
+            setTimeout(() => {
+              saveLoadButton.classList.remove('highlight-menu');
+            }, 2000);
+          }
+          
+          // Update the local saves list if it's visible
+          if (typeof updateSavedGamesList === 'function') {
+            updateSavedGamesList();
+          }
           
         } catch (error) {
-          console.error('Error loading save:', error);
-          alert('There was an error loading the save. Please try again.');
+          console.error('Error adding save to local saves:', error);
+          
+          // Show error in notification instead of alert
+          const notification = document.getElementById('communityNotification');
+          if (notification) {
+            notification.textContent = 'Error adding save. Please try again.';
+            notification.style.backgroundColor = '#ffdddd';
+            notification.style.borderColor = '#ff0000';
+            notification.style.display = 'block';
+            
+            // Hide notification after 5 seconds
+            setTimeout(() => {
+              notification.style.display = 'none';
+              notification.textContent = 'Save added to your local saves!';
+              notification.style.backgroundColor = '#f8f8d7';
+              notification.style.borderColor = '#e6e600';
+            }, 5000);
+          }
         }
       }
       
@@ -8296,7 +8368,8 @@ function explodeNukeBomb(cx, cy){
                 <span id="communityPreviewDate"></span>
                 <span id="communityPreviewSize"></span>
               </div>
-              <button id="communityLoadSelectedBtn" class="load-selected-btn" disabled>Load Selected Save</button>
+              <button id="communityAddSelectedBtn" class="add-selected-btn" disabled>Add Selected Save</button>
+              <div id="communityNotification" class="community-notification" style="display: none;">Save added to your local saves!</div>
             </div>
           </div>
         </div>
