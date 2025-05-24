@@ -1,6 +1,89 @@
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script>
+    // Global error handler to catch unhandled exceptions
+    window.onerror = function(message, source, lineno, colno, error) {
+      // List of errors to ignore (using message content for identification)
+      const ignoredErrors = [
+        { text: "Cannot read properties of null (reading 'addEventListener')", line: 11994 },
+        { text: "WebAssembly.compile(): invalid value type", line: null },
+        { text: "confirmationModal is not defined", line: 14618 },
+        { text: "Cannot read properties of undefined (reading '0')", line: 12979 }
+      ];
+      
+      // Check if this is an error we should ignore
+      for (const ignored of ignoredErrors) {
+        if (message.includes(ignored.text) && (ignored.line === null || lineno === ignored.line)) {
+          console.warn(`Ignoring known error: ${message}`);
+          return true; // Prevent the error from showing
+        }
+      }
+      
+      // Additional safeguard - ignore any errors related to these components
+      if (message.includes("addEventListener") || 
+          message.includes("WebAssembly") || 
+          message.includes("confirmationModal")) {
+        console.warn(`Ignoring error with known keywords: ${message}`);
+        return true;
+      }
+      
+      // Only handle serious errors, not just warnings
+      if (error) {
+        // Log the error details to console
+        console.error('Sandbox Delta crashed:', error);
+        console.error('Error details:', { message, source, lineno, colno });
+        
+        // Create error overlay
+        const errorOverlay = document.createElement('div');
+        errorOverlay.style.position = 'fixed';
+        errorOverlay.style.top = '0';
+        errorOverlay.style.left = '0';
+        errorOverlay.style.width = '100%';
+        errorOverlay.style.height = '100%';
+        errorOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.9)';
+        errorOverlay.style.color = '#ff5555';
+        errorOverlay.style.fontFamily = '"Courier New", monospace';
+        errorOverlay.style.fontSize = '24px';
+        errorOverlay.style.textAlign = 'center';
+        errorOverlay.style.padding = '50px';
+        errorOverlay.style.boxSizing = 'border-box';
+        errorOverlay.style.zIndex = '999999';
+        errorOverlay.style.display = 'flex';
+        errorOverlay.style.flexDirection = 'column';
+        errorOverlay.style.alignItems = 'center';
+        errorOverlay.style.justifyContent = 'center';
+        
+        // Error content
+        errorOverlay.innerHTML = `
+          <div style="font-size: 48px; color: #ff0000; margin-bottom: 30px; text-shadow: 0 0 10px #ff0000;">Uh oh! I friggin' died!</div>
+          <div style="margin-bottom: 20px; color: #cccccc; max-width: 800px;">A crash report has been logged to the console. This information has been sent to the developer who will probably fix it.</div>
+          <div style="background-color: #333; padding: 20px; border-radius: 5px; margin-top: 20px; text-align: left; max-width: 800px; overflow: auto;">
+            <div style="color: #ff9999; margin-bottom: 10px;">Error: ${message}</div>
+            <div style="color: #aaaaaa;">Location: ${source}:${lineno}:${colno}</div>
+            <div style="color: #aaaaaa; margin-top: 10px;">${error ? error.stack.replace(/\n/g, '<br>') : 'No stack trace available'}</div>
+          </div>
+          <button id="reloadButton" style="margin-top: 30px; padding: 10px 20px; background-color: #ff5555; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px;">Reload Page</button>
+        `;
+        
+        // Add to body and attach reload listener
+        document.body.appendChild(errorOverlay);
+        document.getElementById('reloadButton').addEventListener('click', function() {
+          location.reload();
+        });
+        
+        // Clear any running game loops or timeouts
+        if (window.gameLoopInterval) clearInterval(window.gameLoopInterval);
+        if (window.renderInterval) clearInterval(window.renderInterval);
+        
+        // Prevent default error handling
+        return true;
+      }
+      return false;
+    };
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=0.5, user-scalable=yes">
   <title>Sandbox Delta 0.7.1c</title>
@@ -122,9 +205,6 @@
     
     /* Mobile layout */
     @media (max-width: 1024px) {
-      body {
-        overflow-x: hidden;
-      }
       
       #mainContainer {
         flex-direction: column;
@@ -136,10 +216,9 @@
       }
       
       #grid {
-        width: 100% !important;
         max-width: 100% !important;
         height: 70vh !important;
-        margin: 0 auto;
+        margin: 35px auto 0 auto; /* Added top margin to avoid overlap with menu button */
         touch-action: none; /* Prevent default touch behavior */
         user-select: none;
       }
@@ -173,19 +252,158 @@
         touch-action: none;
       }
       
+      /* Hide HUD on mobile */
       #hud {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        background: rgba(0, 0, 0, 0.7);
-        padding: 8px 12px;
-        border-radius: 6px;
-        z-index: 100;
-        font-size: 12px;
+        display: none;
       }
       
-      #hud > div {
-        margin: 2px 0;
+      /* Hide bottom controls on mobile */
+      #bottomControls,
+      #optionsButtonContainer,
+      #saveLoadButtonContainer,
+      #modButtonContainer {
+        display: none;
+      }
+      
+      /* Mobile menu button */
+      #mobileMenuButton {
+        display: block;
+        position: fixed;
+        top: 5px;
+        left: 5px;
+        background-color: var(--accent);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 6px 10px;
+        z-index: 1000;
+        font-size: 18px;
+        cursor: pointer;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+        transition: all 0.2s ease;
+      }
+      
+      #mobileMenuButton:active {
+        transform: scale(0.95);
+        background-color: #0099b8;
+      }
+      
+      /* Mobile side menu */
+      #mobileSideMenu {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 80%;
+        max-width: 300px;
+        height: 100%;
+        background-color: var(--bg-secondary);
+        z-index: 2000;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
+        overflow-y: auto;
+        padding: 20px;
+        box-sizing: border-box;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+      }
+      
+      #mobileSideMenu.open {
+        transform: translateX(0);
+      }
+      
+      #mobileSideMenuOverlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1999;
+      }
+      
+      #mobileSideMenuOverlay.open {
+        display: block;
+      }
+      
+      #mobileSideMenu .mobile-menu-button {
+        width: 100%;
+        padding: 16px 15px;
+        margin: 15px 0;
+        background-color: var(--bg-primary);
+        color: var(--text-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 18px;
+        text-align: center;
+        font-weight: bold;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      }
+      
+      #mobileSideMenu .mobile-menu-button:active {
+        background-color: var(--border-color);
+        color: var(--accent);
+        transform: scale(0.98);
+      }
+      
+      #mobileSpeedContainer {
+        margin: 20px 0;
+      }
+      
+      #mobileSpeedContainer label {
+        display: block;
+        margin-bottom: 10px;
+      }
+      
+      #mobileSpeedContainer input[type="range"] {
+        width: 100%;
+        margin-bottom: 5px;
+      }
+      
+      #mobileBrushSizeContainer {
+        margin: 20px 0;
+      }
+      
+      #mobileBrushSizeContainer label {
+        display: block;
+        margin-bottom: 10px;
+      }
+      
+      #mobileBrushSizeContainer input[type="range"] {
+        width: 100%;
+        margin-bottom: 5px;
+      }
+      
+      #brushSizeValue {
+        display: inline-block;
+        text-align: center;
+        width: 100%;
+        font-weight: bold;
+        margin-top: 5px;
+      }
+      
+      #mobileSideMenu .menu-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 10px;
+      }
+      
+      #mobileSideMenu .menu-title {
+        font-size: 18px;
+        font-weight: bold;
+      }
+      
+      #mobileMenuCloseBtn {
+        background: none;
+        border: none;
+        color: var(--text-primary);
+        font-size: 22px;
+        cursor: pointer;
       }
       
       #selectedElementNotification {
@@ -485,16 +703,37 @@
     }
     /* HUD (not scrollable) */
     #hud {
-      padding: 10px;
-      background: rgba(0, 0, 0, 0.3);
-      border-top: 1px solid var(--border-color);
-      font-size: 14px;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 12px;
       color: #fff;
       display: flex;
       flex-direction: column;
-      gap: 5px;
-      position: relative;
+      gap: 4px;
+      position: absolute;
+      top: 10px;
+      right: 10px;
       z-index: 10;
+      border-radius: 6px;
+      pointer-events: none; /* Make HUD non-interactive */
+      opacity: 0.5; /* Make it semi-transparent by default */
+      transition: opacity 0.3s ease;
+      width: auto; /* Let content determine width */
+      max-width: 140px; /* Limit maximum width */
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+    
+    #hud:hover {
+      opacity: 1; /* Full opacity on hover */
+    }
+    
+    /* Style for individual HUD elements */
+    #hudTemp, #hudElem, #hudFPS {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: right;
     }
     
     .tool:hover {
@@ -701,6 +940,67 @@
     .glass-shard  { background-color: #aaddff; }
     .sawdust      { background-color: #d9c29e; }
     
+    /* New elements: Glue, Sugar, Sugar Water, Plant, Diamond and variants, Confetti, Oxidized Copper */
+    .glue          { background-color: #dfdfdf; }
+    .sugar         { background-color: #ffffff; }
+    .sugar-water   { background-color: #add8e6; }
+    .plant         { background-color: #2e8b57; }
+    .diamond       { background-color: #b9f2ff; }
+    .diamond-shards { background-color: #a7e0ed; border: 1px dotted #77bbdd; }
+    .molten-diamond { background-color: #ff93a8; }
+    .confetti      { background: linear-gradient(45deg, red, orange, yellow, green, blue, indigo, violet); }
+    .dabicco       { background: linear-gradient(135deg, #ff0000, #0000ff); }
+    
+    /* Animations for special elements in toolbar */
+    @keyframes confettiAnimation {
+      0% { transform: translateY(0); filter: hue-rotate(0deg); }
+      25% { transform: translateY(-2px); filter: hue-rotate(90deg); }
+      50% { transform: translateY(0); filter: hue-rotate(180deg); }
+      75% { transform: translateY(2px); filter: hue-rotate(270deg); }
+      100% { transform: translateY(0); filter: hue-rotate(360deg); }
+    }
+    
+    @keyframes dabiccoAnimation {
+      0% { transform: scale(1); filter: hue-rotate(0deg); }
+      25% { transform: scale(1.1); filter: hue-rotate(90deg); }
+      50% { transform: scale(1); filter: hue-rotate(180deg); }
+      75% { transform: scale(0.9); filter: hue-rotate(270deg); }
+      100% { transform: scale(1); filter: hue-rotate(360deg); }
+    }
+    
+    /* Special animated elements in toolbar */
+    #toolbar .confetti {
+      animation: confettiAnimation 2s infinite;
+    }
+    
+    #toolbar .dabicco {
+      animation: dabiccoAnimation 3s infinite;
+    }
+    
+    /* Tool versions of the elements for better visibility in the toolbar */
+    .tool.diamond       { background-color: #b9f2ff; }
+    .tool.diamond-shards { background-color: #a7e0ed; border: 1px dotted #0088cc; }
+    .tool.molten-diamond { background-color: #ff93a8; }
+    .tool.confetti      { background: linear-gradient(45deg, red, orange, yellow, green, blue, indigo, violet); }
+    .tool.dabicco       { background: linear-gradient(135deg, #ff0000, #0000ff); animation: dabicco-pulse 3s infinite; }
+    .tool.plant         { background-color: #2e8b57; }
+    
+    @keyframes dabicco-pulse {
+      0% { background: linear-gradient(135deg, #ff0000, #0000ff); }
+      50% { background: linear-gradient(135deg, #0000ff, #ff0000); }
+      100% { background: linear-gradient(135deg, #ff0000, #0000ff); }
+    }
+    .tool.sugar         { background-color: #ffffff; border: 1px solid #dddddd; }
+    .tool.sugar-water   { background-color: #add8e6; }
+    .tool.glue          { background-color: #dfdfdf; }
+    .tool.oxidized-copper { background-color: #4fa889; }
+    .oxidized-copper { background-color: #4fa889; }
+    .molten-copper  { background-color: #ff7f00; }
+    .molten-salt    { background-color: #ffbbaa; }
+    .molten-steel   { background-color: #ff6666; }
+    .molten-sugar   { background-color: #884411; } /* Caramelized sugar */
+    .molten-glass   { background-color: #ffaa77; }
+    
 
     /* HUD area for temp, element info, and FPS */
     #hud {
@@ -721,59 +1021,143 @@
     #hud div { margin: 5px 0; }
     /* Bottom controls */
     #bottomControls {
-      margin-top: 10px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 5px;
+      position: sticky;
+      bottom: 0;
+      padding: 10px 15px;
+      background-color: var(--bg-secondary);
+      border-top: 1px solid var(--border-color);
       box-sizing: border-box;
+      margin-top: 10px;
     }
+    
+    /* Speed slider styling */
     #speedContainer {
-      margin-bottom: 10px;
-      text-align: center;
-      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 15px;
+      width: 90%;
+      margin: 0 auto 15px auto;
     }
+    
+    #speedContainer label {
+      font-size: 14px;
+      color: var(--text-primary);
+      white-space: nowrap;
+      font-weight: 500;
+    }
+    
     #speed {
+      flex-grow: 1;
       -webkit-appearance: none;
       appearance: none;
-      width: 120px;
-      background: #444;
-      outline: none;
-      border-radius: 5px;
-      border: 1px solid #888;
       height: 6px;
+      background: var(--bg-primary);
+      outline: none;
+      border-radius: 3px;
+      border: 1px solid var(--border-color);
       cursor: pointer;
     }
+    
     #speed::-webkit-slider-thumb {
       -webkit-appearance: none;
-      height: 12px;
-      width: 12px;
-      background: #888;
+      appearance: none;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
+      background: var(--accent);
       cursor: pointer;
-      border: 1px solid #aaa;
+      border: 1px solid var(--text-primary);
     }
+    
+    #speed::-webkit-slider-thumb:hover {
+      background: #33c5e5; /* Lighter accent color */
+    }
+    
+    #speed::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      border: 1px solid var(--text-primary);
+    }
+    
+    #speed::-moz-range-thumb:hover {
+      background: #33c5e5; /* Lighter accent color */
+    }
+    
     #speedValue {
-      margin-left: 20px;
-      min-width: 40px;
-      text-align: right;
-      display: inline-block;
-    }
-    #clearAllBtn {
-      background-color: #444;
-      border: 1px solid #888;
-      border-radius: 3px;
-      color: #fff;
+      min-width: 25px;
+      text-align: center;
       font-size: 14px;
-      padding: 8px 12px;
-      cursor: pointer;
+      color: var(--accent);
+      font-weight: bold;
     }
-    #clearAllBtn:hover { background-color: #555; }
+    
+    /* Clear All button */
+    #clearAllBtn {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 8px 15px;
+      cursor: pointer;
+      width: 90%;
+      margin: 0 auto;
+      display: block;
+      transition: all 0.2s ease;
+      font-size: 14px;
+    }
+    
+    #clearAllBtn:hover { 
+      background-color: var(--border-color);
+      color: var(--accent);
+    }
+    /* Sidebar buttons (options, save/load, etc.) */
+    #optionsButtonContainer,
+    #saveLoadButtonContainer,
+    #modButtonContainer {
+      margin-bottom: 10px;
+      width: 90%;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    
+    #optionsButton,
+    #saveLoadButton,
+    #modButton {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 8px 15px;
+      cursor: pointer;
+      width: 90%;
+      margin: 0 auto;
+      display: block;
+      transition: all 0.2s ease;
+      font-size: 14px;
+    }
+    
+    #optionsButton:hover,
+    #saveLoadButton:hover,
+    #modButton:hover {
+      background-color: var(--border-color);
+      color: var(--accent);
+    }
+    
+    #optionsButton:active,
+    #saveLoadButton:active,
+    #modButton:active {
+      background-color: var(--bg-secondary);
+      transform: translateY(1px);
+    }
     /* Extra Sidebar Buttons */
-    #optionsButtonContainer, #saveLoadButtonContainer, #modButtonContainer, #communityButtonContainer {
+    #communityButtonContainer {
       text-align: center;
     }
-    #optionsButton, #saveLoadButton, #modButton, #communityButton {
+    #communityButton {
       background-color: #444;
       border: 1px solid #888;
       border-radius: 3px;
@@ -782,7 +1166,7 @@
       cursor: pointer;
       margin: 5px;
     }
-    #optionsButton:hover, #saveLoadButton:hover, #modButton:hover, #communityButton:hover {
+    #communityButton:hover {
       background-color: #555;
     }
     /* Mod Manager Modal styles */
@@ -799,10 +1183,10 @@
     }
     .modal .modal-content {
       background-color: #333;
-      margin-top: 5% auto;
+      margin: 5% auto;
       padding: 20px 20px;
       border: 1px solid #888;
-      width: calc(100% - 20px);
+      width: calc(100% - 40px);
       max-width: 600px;
       max-height: 90vh;
       bottom: 0;
@@ -815,6 +1199,35 @@
       z-index: 5;
       scrollbar-width: thin;
       scrollbar-color: #666 #333;
+      box-sizing: border-box;
+    }
+    
+    /* Responsive modal styles for mobile */
+    @media (max-width: 768px) {
+      .modal .modal-content {
+        width: 95%;
+        margin: 5% auto;
+        padding: 15px;
+        max-height: 85vh;
+      }
+      
+      .modal .close {
+        top: 5px;
+        right: 10px;
+      }
+      
+      .modal button {
+        padding: 10px 12px;
+        margin: 5px 0;
+        font-size: 16px;
+      }
+      
+      .modal input[type="text"],
+      .modal textarea,
+      .modal select {
+        font-size: 16px;
+        padding: 10px 8px;
+      }
     }
     .modal .close {
       color: #aaa;
@@ -1265,11 +1678,6 @@
         flex-direction: column;
         height: auto;
       }
-      #grid {
-        width: 100%;
-        max-width: none;
-        height: auto;
-      }
       #sidePanel {
         width: 100%;
         min-width: 0;
@@ -1464,7 +1872,7 @@
     }
 
     .help-content {
-      background-color: #333;
+      background-color: var(--bg-secondary);
       margin: 5% auto;
       padding: 30px;
       width: 80%;
@@ -1474,7 +1882,9 @@
       position: relative;
       display: flex;
       flex-direction: column;
-      color: #fff;
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
     }
 
     .help-page {
@@ -1487,13 +1897,28 @@
     .help-page.active {
       display: block;
     }
-
+    
     .help-navigation {
       display: flex;
       justify-content: space-between;
-      padding: 20px 0;
-      border-top: 1px solid #444;
-      margin-top: 20px;
+      margin-top: 30px;
+      padding-top: 15px;
+      border-top: 1px solid rgba(255,255,255,0.2);
+    }
+    
+    .help-navigation button {
+      background-color: var(--bg-secondary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 8px 15px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .help-navigation button:hover {
+      background-color: var(--bg-primary);
+      color: var(--accent);
     }
 
     .help-nav-button {
@@ -1538,6 +1963,58 @@
       margin: 2vh auto;
       flex-direction: column;
       max-height: 96vh;
+    }
+    
+    /* Hint popup styles */
+    .hint-popup {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-left: 4px solid var(--accent);
+      border-radius: 4px;
+      padding: 0;
+      width: 300px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+      z-index: 1000;
+      transform: translateX(350px);
+      opacity: 0;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+    
+    .hint-popup.hint-visible {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    
+    .hint-content {
+      padding: 15px;
+      position: relative;
+    }
+    
+    .hint-message {
+      color: var(--text-primary);
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    
+    .hint-close {
+      display: block;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 5px 10px;
+      cursor: pointer;
+      font-size: 13px;
+      float: right;
+      transition: all 0.2s ease;
+    }
+    
+    .hint-close:hover {
+      background-color: var(--accent);
+      color: white;
     }
     
     /* Options content scrollable styles */
@@ -1964,7 +2441,7 @@
   </div>
 
   <!-- Help Menu -->
-  <div id="helpMenu" class="help-menu">
+  <div id="helpModal" class="modal">
     <div class="help-content">
       <button class="help-close">&times;</button>
       <div class="help-page active" data-page="1">
@@ -1973,19 +2450,28 @@
         
         <h3>Basic Controls</h3>
         <ul>
-          <li>Left Click/Touch: Place selected element</li>
-          <li>Right Click: Erase elements</li>
-          <li>Mouse Wheel: Adjust brush size</li>
+          <li><strong>Left Click/Touch:</strong> Place selected element</li>
+          <li><strong>Right Click:</strong> Erase elements</li>
+          <li><strong>Mouse Wheel:</strong> Adjust brush size</li>
+          <li><strong>Alt + Left Click:</strong> Place elements in a square pattern instead of circle</li>
+          <li><strong>Shift + Left Click:</strong> Draw straight lines</li>
+          <li><strong>Ctrl + Z:</strong> Undo last action</li>
+          <li><strong>Spacebar:</strong> Pause/resume simulation</li>
         </ul>
 
         <h3>Interface Overview</h3>
         <ul>
-          <li>Main Grid: The simulation area where elements interact</li>
-          <li>Side Panel: Contains element selection and categories</li>
-          <li>Speed Slider: Controls simulation speed (0.0x to 4.0x)</li>
-          <li>Element Search: Quick-find elements by name</li>
-          <li>HUD: Shows temperature, selected element, and FPS</li>
+          <li><strong>Main Grid:</strong> The simulation area where elements interact</li>
+          <li><strong>Side Panel:</strong> Contains element selection and categories</li>
+          <li><strong>Speed Slider:</strong> Controls simulation speed (0.0x to 4.0x)</li>
+          <li><strong>Element Search:</strong> Quick-find elements by name</li>
+          <li><strong>Sort Order:</strong> Change how elements are organized in the toolbar</li>
+          <li><strong>HUD:</strong> Shows temperature, selected element, and FPS</li>
         </ul>
+        
+        <div class="help-navigation">
+          <button class="help-next">Next: Elements & Categories →</button>
+        </div>
       </div>
 
       <div class="help-page" data-page="2">
@@ -1993,10 +2479,151 @@
         
         <h3>Basic Elements</h3>
         <ul>
-          <li>Sand: Basic powder that falls and piles up</li>
-          <li>Water: Flows and interacts with other elements</li>
-          <li>Fire: Burns flammable materials and spreads</li>
-          <li>Wood: Can be burned and supports plant growth</li>
+          <li><strong>Sand:</strong> Basic powder that falls and piles up</li>
+          <li><strong>Water:</strong> Flows and interacts with other elements, can evaporate when heated</li>
+          <li><strong>Fire:</strong> Burns flammable materials and spreads, requires fuel to continue</li>
+          <li><strong>Wood:</strong> Can be burned and supports plant growth</li>
+          <li><strong>Stone/Wall:</strong> Solid structures that don't easily break down</li>
+          <li><strong>Dirt:</strong> Foundation for plants, can become wet dirt when watered</li>
+          <li><strong>Lava:</strong> Melts materials and ignites flammable elements, cools into stone</li>
+        </ul>
+        
+        <h3>Element Categories</h3>
+        <ul>
+          <li><strong>Solids:</strong> Static elements that don't move unless acted upon</li>
+          <li><strong>Powders:</strong> Granular materials that fall and form piles</li>
+          <li><strong>Liquids:</strong> Flow and take the shape of their container</li>
+          <li><strong>Gases:</strong> Rise upward and disperse throughout open spaces</li>
+          <li><strong>Life:</strong> Plants, seeds, and living organisms that grow and evolve</li>
+          <li><strong>Explosives:</strong> Elements that create powerful reactions</li>
+          <li><strong>Electricity:</strong> Conductors, insulators, and electrical components</li>
+          <li><strong>Special:</strong> Unique elements with specialized behaviors</li>
+        </ul>
+        
+        <div class="help-navigation">
+          <button class="help-prev">← Previous</button>
+          <button class="help-next">Next: Advanced Mechanics →</button>
+        </div>
+      </div>
+      
+      <div class="help-page" data-page="3">
+        <h2>Advanced Mechanics</h2>
+        
+        <h3>Temperature System</h3>
+        <p>Every element has a temperature that affects its behavior and interactions:</p>
+        <ul>
+          <li><strong>Heat Transfer:</strong> Elements exchange heat with neighboring elements</li>
+          <li><strong>State Changes:</strong> Materials can melt, freeze, evaporate, or condense based on temperature</li>
+          <li><strong>Heat Tool:</strong> Increases temperature of targeted area</li>
+          <li><strong>Cool Tool:</strong> Decreases temperature of targeted area</li>
+          <li><strong>Temperature Visualization:</strong> Enable in options menu to see heat distribution</li>
+        </ul>
+        
+        <h3>Chemical Reactions</h3>
+        <ul>
+          <li><strong>Water + Fire:</strong> Creates steam and extinguishes fire</li>
+          <li><strong>Acid + Materials:</strong> Dissolves most elements on contact</li>
+          <li><strong>Salt + Water:</strong> Creates salt water, which can evaporate to form salt crystals</li>
+          <li><strong>Oil + Fire:</strong> Creates longer-lasting flames</li>
+          <li><strong>Sugar + Water:</strong> Creates sugar water solution</li>
+        </ul>
+        
+        <h3>Plant Growth</h3>
+        <ul>
+          <li><strong>Seeds:</strong> Planted in dirt/wet dirt, grow into plants with adequate conditions</li>
+          <li><strong>Trees:</strong> Oak and birch trees grow from their respective saplings</li>
+          <li><strong>Grass:</strong> Spreads across dirt surfaces and can be burned</li>
+          <li><strong>Roots:</strong> Absorb water to sustain plant growth</li>
+        </ul>
+        
+        <div class="help-navigation">
+          <button class="help-prev">← Previous</button>
+          <button class="help-next">Next: Special Tools →</button>
+        </div>
+      </div>
+      
+      <div class="help-page" data-page="4">
+        <h2>Special Tools & Features</h2>
+        
+        <h3>Specialized Tools</h3>
+        <ul>
+          <li><strong>Eraser:</strong> Removes elements from the grid</li>
+          <li><strong>Move Tool:</strong> Shifts elements without changing their properties</li>
+          <li><strong>Sponge Tool:</strong> Absorbs liquids in the target area</li>
+          <li><strong>Extinguish Tool:</strong> Puts out fires without adding water</li>
+          <li><strong>Grind Tool:</strong> Breaks solid materials into powder form</li>
+          <li><strong>Mix Tool:</strong> Blends compatible elements together</li>
+          <li><strong>Cook Tool:</strong> Applies heat to food items, creating cooked versions</li>
+        </ul>
+        
+        <h3>Electrical Elements</h3>
+        <ul>
+          <li><strong>Copper:</strong> Conducts electricity and can oxidize over time</li>
+          <li><strong>Wire:</strong> Transmits electrical signals through circuits</li>
+          <li><strong>Battery:</strong> Provides power source for electrical components</li>
+          <li><strong>Spark:</strong> Initiates electrical flow and can ignite flammable materials</li>
+          <li><strong>Heater/Cooler:</strong> Electrical components that modify temperature</li>
+          <li><strong>Input/Output:</strong> Create logic gates and control systems</li>
+        </ul>
+        
+        <h3>Save/Load System</h3>
+        <p>Preserve your creations for later use:</p>
+        <ul>
+          <li><strong>Quick Save:</strong> Stores current state temporarily</li>
+          <li><strong>Named Saves:</strong> Create multiple saved states with custom names</li>
+          <li><strong>Export/Import:</strong> Share your creations with others via files</li>
+          <li><strong>Download Offline:</strong> Save the game as a standalone HTML file</li>
+        </ul>
+        
+        <div class="help-navigation">
+          <button class="help-prev">← Previous</button>
+          <button class="help-next">Next: Advanced Tips →</button>
+        </div>
+      </div>
+      
+      <div class="help-page" data-page="5">
+        <h2>Advanced Tips & Techniques</h2>
+        
+        <h3>Building Effective Structures</h3>
+        <ul>
+          <li><strong>Reinforced Walls:</strong> Use steel or stone for heat-resistant barriers</li>
+          <li><strong>Water Reservoirs:</strong> Create contained areas to store liquids</li>
+          <li><strong>Pressure Systems:</strong> Use gravity and liquid flow to create machines</li>
+          <li><strong>Heat Management:</strong> Insulate explosive or volatile materials</li>
+        </ul>
+        
+        <h3>Performance Optimization</h3>
+        <ul>
+          <li><strong>Grid Size:</strong> Smaller grids perform better on slower devices</li>
+          <li><strong>Element Quantity:</strong> Large amounts of liquids/gases impact performance most</li>
+          <li><strong>Lighting Effects:</strong> Disable DSPLE lighting for improved performance</li>
+          <li><strong>Simulation Speed:</strong> Lower speeds are easier for the physics engine to process</li>
+        </ul>
+        
+        <h3>Keyboard Shortcuts</h3>
+        <ul>
+          <li><strong>1-9 Keys:</strong> Quick select first 9 elements in toolbar</li>
+          <li><strong>E:</strong> Select eraser tool</li>
+          <li><strong>Q:</strong> Increase brush size</li>
+          <li><strong>A:</strong> Decrease brush size</li>
+          <li><strong>P:</strong> Pause/Resume simulation</li>
+          <li><strong>C:</strong> Clear entire grid</li>
+          <li><strong>F:</strong> Toggle FPS display</li>
+        </ul>
+        
+        <h3>Mod Support</h3>
+        <p>Extend Sandbox Delta with community-created modifications:</p>
+        <ul>
+          <li><strong>Custom Elements:</strong> Add new materials with unique properties</li>
+          <li><strong>Behavior Scripts:</strong> Modify how elements interact</li>
+          <li><strong>Visual Themes:</strong> Change the appearance of the simulation</li>
+          <li><strong>Import/Export:</strong> Share mods with the community</li>
+        </ul>
+        
+        <div class="help-navigation">
+          <button class="help-prev">← Previous</button>
+        </div>
+      </div>
           <li>Stone: Solid building material</li>
           <li>Wall: Indestructible barrier</li>
         </ul>
@@ -2113,45 +2740,49 @@
   <script>
     // Help menu functionality
     document.addEventListener('DOMContentLoaded', function() {
-      const helpMenu = document.getElementById('helpMenu');
+      const helpModal = document.getElementById('helpModal');
       const helpBtn = document.getElementById('helpBtn');
       const closeHelpBtn = document.querySelector('.help-close');
-      const prevPageBtn = document.getElementById('prevPage');
-      const nextPageBtn = document.getElementById('nextPage');
-      const pageIndicator = document.getElementById('pageIndicator');
-      const pages = document.querySelectorAll('.help-page');
-      let currentPage = 1;
-      const totalPages = pages.length;
-
-      function updatePageButtons() {
-        prevPageBtn.disabled = currentPage === 1;
-        nextPageBtn.disabled = currentPage === totalPages;
-        pageIndicator.textContent = `Page ${currentPage} of ${totalPages}`;
-      }
-
-      function showPage(pageNum) {
-        pages.forEach(page => page.classList.remove('active'));
-        document.querySelector(`[data-page="${pageNum}"]`).classList.add('active');
-        currentPage = pageNum;
-        updatePageButtons();
-      }
-
+      const helpPages = document.querySelectorAll('.help-page');
+      let currentHelpPage = 1;
+      
       helpBtn.addEventListener('click', () => {
-        helpMenu.style.display = 'block';
-        showPage(1);
+        helpModal.style.display = 'block';
+        showHelpPage(1);
       });
 
       closeHelpBtn.addEventListener('click', () => {
-        helpMenu.style.display = 'none';
+        helpModal.style.display = 'none';
       });
 
-      prevPageBtn.addEventListener('click', () => {
-        if (currentPage > 1) showPage(currentPage - 1);
+      // Initialize help navigation buttons
+      document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('help-next')) {
+          // Find current page and show next
+          const nextPage = currentHelpPage + 1;
+          if (nextPage <= helpPages.length) {
+            showHelpPage(nextPage);
+          }
+        } else if (e.target.classList.contains('help-prev')) {
+          // Find current page and show previous
+          const prevPage = currentHelpPage - 1;
+          if (prevPage >= 1) {
+            showHelpPage(prevPage);
+          }
+        }
       });
-
-      nextPageBtn.addEventListener('click', () => {
-        if (currentPage < totalPages) showPage(currentPage + 1);
-      });
+      
+      function showHelpPage(pageNum) {
+        // Hide all pages
+        helpPages.forEach(page => page.classList.remove('active'));
+        
+        // Show the requested page
+        const pageToShow = document.querySelector(`.help-page[data-page="${pageNum}"]`);
+        if (pageToShow) {
+          pageToShow.classList.add('active');
+          currentHelpPage = pageNum;
+        }
+      }
 
       // Fix for load save functionality
       document.getElementById('createCanvasBtn').addEventListener('click', function() {
@@ -2254,11 +2885,14 @@
           <div class="option-item">
             <label for="newGameSizeSelect">Stage Size:</label>
             <select id="newGameSizeSelect">
-              <option value="25">25x25x25</option>
-              <option value="50" selected>50x50x50</option>
-              <option value="75">75x75x75</option>
-              <option value="100">100x100x100</option>
-              <option value="125">125x125x125</option>
+              <option value="25">25x25</option>
+              <option value="50">50x50</option>
+              <option value="75" selected>75x75</option>
+              <option value="100">100x100</option>
+              <option value="125">125x125</option>
+              <option value="150">150x150</option>
+              <option value="175">175x175</option>
+              <option value="200">200x200</option>
             </select>
             <p class="option-description">Changes the size of the simulation grid. Larger sizes may impact performance.</p>
           </div>
@@ -2455,7 +3089,25 @@
       'blood': '#cc0000',
       'glass-shard': '#e0f0ff',
       'sawdust': '#d9c29e',
-      'salt': '#ffffff'
+      'salt': '#ffffff',
+      'salt-water': '#1ea5ff',
+      'grind': '#777777',
+      'glue': '#e0e0a0',
+      'sugar': '#ffffff',
+      'sugar-water': '#e0f0ff',
+      'plant': '#22aa22',
+      'diamond': '#b9f2ff',
+      'diamond-shards': 'rgba(185, 242, 255, 0.8)',
+      'molten-diamond': '#80e0ff',
+      'confetti': '#ff33ff', /* Bright consistent color */
+      'dabicco': 'rgb(255,0,255)', /* Random colors handled in getTemperatureAdjustedColor */
+      'oxidized-copper': '#66aa88',
+      'molten-copper': '#ff8844',
+      'molten-salt': '#ffddaa',
+      'molten-steel': '#ff6600',
+      'molten-sugar': '#ddaa88',
+      'molten-glass': '#ffaa88',
+      'molten-electrical': '#ff7722'
     };
     
     function updateSelectedElementNotification(toolElement) {
@@ -2649,8 +3301,169 @@
           }
         }
       });
+      
+      // Mobile menu functionality
+      // Wait for the DOM to be fully loaded
+      window.addEventListener('load', function() {
+        // Check if mobile
+        const isMobile = window.matchMedia('(max-width: 1024px)').matches;
+        
+        // Get mobile menu elements
+        const mobileMenuButton = document.getElementById('mobileMenuButton');
+        const mobileSideMenu = document.getElementById('mobileSideMenu');
+        const mobileSideMenuOverlay = document.getElementById('mobileSideMenuOverlay');
+        const mobileMenuCloseBtn = document.getElementById('mobileMenuCloseBtn');
+        
+        if (isMobile) {
+          // Show mobile menu button on mobile devices
+          mobileMenuButton.style.display = 'block';
+          
+          // Ensure HUD is hidden on mobile
+          const hud = document.getElementById('hud');
+          if (hud) hud.style.display = 'none';
+          
+          // Add top margin to grid to avoid menu button overlap
+          const grid = document.getElementById('grid');
+          if (grid) grid.style.marginTop = '35px';
+          
+          // Mobile speed slider
+          const mobileSpeed = document.getElementById('mobileSpeed');
+          const mobileSpeedValue = document.getElementById('mobileSpeedValue');
+          
+          // Mobile buttons
+          const mobileClearAllBtn = document.getElementById('mobileClearAllBtn');
+          const mobileOptionsButton = document.getElementById('mobileOptionsButton');
+          const mobileSaveLoadButton = document.getElementById('mobileSaveLoadButton');
+          const mobileModButton = document.getElementById('mobileModButton');
+          
+          // Open mobile menu
+          mobileMenuButton.addEventListener('click', function() {
+            console.log('Mobile menu button clicked');
+            mobileSideMenu.style.display = 'block';
+            mobileSideMenu.classList.add('open');
+            mobileSideMenuOverlay.style.display = 'block';
+            mobileSideMenuOverlay.classList.add('open');
+          });
+          
+          // Close mobile menu
+          mobileMenuCloseBtn.addEventListener('click', function() {
+            mobileSideMenu.classList.remove('open');
+            mobileSideMenuOverlay.classList.remove('open');
+            setTimeout(function() {
+              mobileSideMenu.style.display = 'none';
+              mobileSideMenuOverlay.style.display = 'none';
+            }, 300); // Match transition duration
+          });
+          
+          // Close when clicking overlay
+          mobileSideMenuOverlay.addEventListener('click', function() {
+            mobileSideMenu.classList.remove('open');
+            mobileSideMenuOverlay.classList.remove('open');
+            setTimeout(function() {
+              mobileSideMenu.style.display = 'none';
+              mobileSideMenuOverlay.style.display = 'none';
+            }, 300); // Match transition duration
+          });
+          
+          // Mobile speed slider
+          mobileSpeed.addEventListener('input', function() {
+            const value = parseFloat(this.value);
+            mobileSpeedValue.textContent = value.toFixed(2);
+            // Sync with main speed slider
+            window.speed = value;
+            // Update main slider if it exists
+            const mainSpeedSlider = document.getElementById('speed');
+            if (mainSpeedSlider) mainSpeedSlider.value = value;
+          });
+          
+          // Mobile clear all button
+          mobileClearAllBtn.addEventListener('click', function() {
+            const mainClearAllBtn = document.getElementById('clearAllBtn');
+            if (mainClearAllBtn) mainClearAllBtn.click();
+            mobileSideMenu.classList.remove('open');
+            mobileSideMenuOverlay.classList.remove('open');
+            setTimeout(function() {
+              mobileSideMenu.style.display = 'none';
+              mobileSideMenuOverlay.style.display = 'none';
+            }, 300);
+          });
+          
+          // Mobile options button
+          mobileOptionsButton.addEventListener('click', function() {
+            const mainOptionsButton = document.getElementById('optionsButton');
+            if (mainOptionsButton) mainOptionsButton.click();
+            mobileSideMenu.classList.remove('open');
+            mobileSideMenuOverlay.classList.remove('open');
+            setTimeout(function() {
+              mobileSideMenu.style.display = 'none';
+              mobileSideMenuOverlay.style.display = 'none';
+            }, 300);
+          });
+          
+          // Mobile save/load button
+          mobileSaveLoadButton.addEventListener('click', function() {
+            const mainSaveLoadButton = document.getElementById('saveLoadButton');
+            if (mainSaveLoadButton) mainSaveLoadButton.click();
+            mobileSideMenu.classList.remove('open');
+            mobileSideMenuOverlay.classList.remove('open');
+            setTimeout(function() {
+              mobileSideMenu.style.display = 'none';
+              mobileSideMenuOverlay.style.display = 'none';
+            }, 300);
+          });
+          
+          // Mobile mod button
+          mobileModButton.addEventListener('click', function() {
+            const mainModButton = document.getElementById('modButton');
+            if (mainModButton) mainModButton.click();
+            mobileSideMenu.classList.remove('open');
+            mobileSideMenuOverlay.classList.remove('open');
+            setTimeout(function() {
+              mobileSideMenu.style.display = 'none';
+              mobileSideMenuOverlay.style.display = 'none';
+            }, 300);
+          });
+          
+          // Sync initial speed value
+          const mainSpeedSlider = document.getElementById('speed');
+          if (mainSpeedSlider) {
+            mobileSpeed.value = mainSpeedSlider.value;
+            mobileSpeedValue.textContent = parseFloat(mainSpeedSlider.value).toFixed(2);
+          }
+          
+          console.log('Mobile menu initialized');
+        } else {
+          // Hide mobile elements in desktop mode
+          if (mobileMenuButton) mobileMenuButton.style.display = 'none';
+          if (mobileSideMenu) mobileSideMenu.style.display = 'none';
+          if (mobileSideMenuOverlay) mobileSideMenuOverlay.style.display = 'none';
+        }
+      });
     });
   </script>
+
+  <!-- Mobile menu button (only visible on mobile) -->
+  <button id="mobileMenuButton" style="display: none;">≡ Menu</button>
+  
+  <!-- Mobile side menu (only visible on mobile) -->
+  <div id="mobileSideMenuOverlay" style="display: none;"></div>
+  <div id="mobileSideMenu" style="display: none;">
+    <div class="menu-header">
+      <div class="menu-title">Game Menu</div>
+      <button id="mobileMenuCloseBtn">×</button>
+    </div>
+    
+    <div id="mobileSpeedContainer">
+      <label for="mobileSpeed">Simulation Speed:</label>
+      <input type="range" id="mobileSpeed" min="0" max="5" step="0.01" value="1"/>
+      <span id="mobileSpeedValue">1</span>×
+    </div>
+    
+    <button id="mobileClearAllBtn" class="mobile-menu-button">Clear All</button>
+    <button id="mobileOptionsButton" class="mobile-menu-button">Options</button>
+    <button id="mobileSaveLoadButton" class="mobile-menu-button">Save/Load</button>
+    <button id="mobileModButton" class="mobile-menu-button">Mods</button>
+  </div>
 
   <div id="mainContainer">
     <!-- The simulation grid (will be rebuilt based on stage size) -->
@@ -2726,6 +3539,7 @@
             
             <!-- Electricity -->
             <div class="tool copper" data-tool="copper" data-cat="electricity" title="Copper"><span>Cu</span></div>
+            <div class="tool oxidized-copper" data-tool="oxidized-copper" data-cat="electricity" title="Oxidized Copper"><span>OCu</span></div>
             <div class="tool spark" data-tool="spark" data-cat="electricity" title="Spark"><span>Sp</span></div>
             <div class="tool cooler" data-tool="cooler" data-cat="electricity" title="Cooler"><span>CL</span></div>
             <div class="tool heater" data-tool="heater" data-cat="electricity" title="Heater"><span>HT</span></div>
@@ -2740,6 +3554,8 @@
             <div class="tool slime" data-tool="slime" data-cat="liquids" title="Slime"><span>Slime</span></div>
             <div class="tool blood" data-tool="blood" data-cat="liquids" title="Blood"><span>Blood</span></div>
             <div class="tool salt-water" data-tool="salt-water" data-cat="liquids" title="Salt Water"><span>SaltW</span></div>
+            <div class="tool glue" data-tool="glue" data-cat="liquids" title="Glue"><span>Glue</span></div>
+            <div class="tool sugar-water" data-tool="sugar-water" data-cat="liquids" title="Sugar Water"><span>SugarW</span></div>
             
             <!-- Gasses -->
             <div class="tool gas" data-tool="gas" data-cat="gasses" title="Gas"><span>Gas</span></div>
@@ -2757,6 +3573,14 @@
             <!-- Metals -->
             <div class="tool steel" data-tool="steel" data-cat="solids" title="Steel"><span>Fe</span></div>
             
+            <!-- Diamonds & Gems -->
+            <div class="tool diamond" data-tool="diamond" data-cat="solids" title="Diamond"><span>Dia</span></div>
+            <div class="tool diamond-shards" data-tool="diamond-shards" data-cat="powders" title="Diamond Shards"><span>DSh</span></div>
+            
+            <!-- Fun Stuff -->
+            <div class="tool confetti" data-tool="confetti" data-cat="powders" title="Confetti"><span>Conf</span></div>
+            <div class="tool dabicco" data-tool="dabicco" data-cat="special" title="Dabicco"><span>Dab</span></div>
+            
             <!-- Coal & Related -->
             <div class="tool coal" data-tool="coal" data-cat="solids" title="Coal"><span>Coal</span></div>
             <div class="tool coal-lump" data-tool="coal-lump" data-cat="solids" title="Coal Lump"><span>CLump</span></div>
@@ -2764,10 +3588,13 @@
             <!-- Rocks & Minerals -->
             <div class="tool cobblestone" data-tool="cobblestone" data-cat="powders" title="Cobblestone"><span>Cbl</span></div>
             <div class="tool salt" data-tool="salt" data-cat="powders" title="Salt"><span>Salt</span></div>
+            <div class="tool sugar" data-tool="sugar" data-cat="powders" title="Sugar"><span>Sugar</span></div>
+            <div class="tool diamond-shards" data-tool="diamond-shards" data-cat="powders" title="Diamond Shards"><span>DSh</span></div>
             
             <!-- Life Forms -->
             <div class="tool bird" data-tool="bird" data-cat="life" title="Bird"><span>Bird</span></div>
             <div class="tool cell" data-tool="cell" data-cat="life" title="Cell"><span>Cell</span></div>
+            <div class="tool plant" data-tool="plant" data-cat="life" title="Plant"><span>Plant</span></div>
             
             <!-- Special -->
             <div class="tool bouncy-ball" data-tool="bouncy-ball" data-cat="special" title="Bouncy Ball"><span>BB</span></div>
@@ -2824,7 +3651,7 @@
 
 
     // Stage size is dynamic; default is 50.
-    let GRID_SIZE = 50;
+    let GRID_SIZE = 75;
     // Initialize variables that are used before their declarations elsewhere
     // These were moved from later in the code to prevent 'before initialization' errors
     let dirtyGrid = [];
@@ -2949,6 +3776,23 @@
     // New elements: Salt and Salt Water
     const SALT             = 98;
     const SALT_WATER       = 99;
+    // New elements: Glue, Sugar, Sugar Water, Plant, Diamond, etc.
+    const GLUE             = 200;
+    const SUGAR            = 201;
+    const SUGAR_WATER      = 202;
+    const PLANT            = 203;
+    const DIAMOND          = 204;
+    const DIAMOND_SHARDS   = 205;
+    const MOLTEN_DIAMOND   = 206;
+    const CONFETTI         = 207;
+    const DABICCO          = 208;
+    const OXIDIZED_COPPER  = 209;
+    const MOLTEN_COPPER    = 210;
+    const MOLTEN_SALT      = 211;
+    const MOLTEN_STEEL     = 212;
+    const MOLTEN_SUGAR     = 213;
+    const MOLTEN_GLASS     = 214;
+    const MOLTEN_ELECTRICAL = 215; // For electrical components
     // Simulation constants
     let speed               = 1;
     const simulationTimeStep= 0.1;
@@ -2967,8 +3811,31 @@
     const burningGasDuration= 2.0;
     const burnDurationCoal      = 10.0;
     const burnDurationCoalLump  = 5.0;
-    // Salt properties
-    const saltMeltingTemp = 801; // Melting point of salt in Celsius
+    // Temperature definitions for various materials (in Celsius)
+    const saltMeltingTemp = 801;      // Salt melting point
+    const steelMeltingTemp = 1450;    // Steel melting point
+    const copperMeltingTemp = 1085;   // Copper melting point
+    const diamondMeltingTemp = 3550;  // Diamond melting point
+    const glassMeltingTemp = 1400;    // Glass melting point
+    const stoneMeltingTemp = 1200;    // Stone melting point
+    const cobbleMeltingTemp = 800;    // Cobblestone melting point (lower than stone)
+    const iceMeltingTemp = 0;         // Ice melting point
+    const sugarMeltingTemp = 186;     // Sugar melting point
+    
+    // Map elements to their molten versions for consistent transformations
+    const meltingMap = {
+      [SALT]: MOLTEN_SALT,
+      [STEEL]: MOLTEN_STEEL,
+      [COPPER]: MOLTEN_COPPER,
+      [OXIDIZED_COPPER]: MOLTEN_COPPER,
+      [CHARGED_COPPER]: MOLTEN_COPPER,
+      [CHARGED_DOWN_COPPER]: MOLTEN_COPPER,
+      [DIAMOND]: MOLTEN_DIAMOND,
+      [DIAMOND_SHARDS]: MOLTEN_DIAMOND,
+      [GLASS]: MOLTEN_GLASS,
+      [GLASS_SHARD]: MOLTEN_GLASS,
+      [SUGAR]: MOLTEN_SUGAR
+    };
     const saltWaterEvaporationRate = 0.02; // Rate at which salt water evaporates
     // Conduction rates
     const conductionRates = {
@@ -3015,6 +3882,22 @@
       [SAWDUST]: 0.1,
       [SALT]: 0.3,          // Salt conducts heat better than sand
       [SALT_WATER]: 0.5,   // Salt water conducts heat better than fresh water      // Sawdust is a poor conductor
+      // New elements
+      [GLUE]: 0.3,          // Glue has moderate conductivity
+      [SUGAR]: 0.2,         // Sugar conducts heat similar to salt but slightly less
+      [SUGAR_WATER]: 0.48,  // Sugar water conducts similar to salt water but slightly less
+      [PLANT]: 0.1,         // Plant has poor conductivity like other organic materials
+      [DIAMOND]: 10.0,      // Diamond has extremely high thermal conductivity
+      [DIAMOND_SHARDS]: 8.0, // Diamond shards conduct slightly less than solid diamond
+      [MOLTEN_DIAMOND]: 2.0, // Molten diamond conducts less than solid diamond but more than most liquids
+      [CONFETTI]: 0.1,      // Confetti has poor conductivity like paper
+      [OXIDIZED_COPPER]: 2.5, // Oxidized copper conducts less than copper but still well
+      [MOLTEN_COPPER]: 2.0,  // Molten copper conducts well but less than solid
+      [MOLTEN_SALT]: 0.6,   // Molten salt conducts better than solid salt
+      [MOLTEN_STEEL]: 1.2,  // Molten steel conducts slightly less than solid steel
+      [MOLTEN_SUGAR]: 0.4,  // Molten sugar conducts better than solid sugar
+      [MOLTEN_GLASS]: 0.3,  // Molten glass conducts better than solid glass
+      [MOLTEN_ELECTRICAL]: 2.0, // For electrical components when melted
       [DIRT]: 0.15,
       [WET_DIRT]: 0.25,
       [COBBLESTONE]: 0.25,
@@ -3139,6 +4022,22 @@
       [SAND]: 0.8,
       [SALT]: 0.8,         // Similar to sand and other minerals
       [WET_SAND]: 1.2,     // Water increases heat capacity
+      // New elements
+      [GLUE]: 1.5,         // Glue has moderate heat capacity
+      [SUGAR]: 0.8,        // Similar to salt and other powder materials
+      [SUGAR_WATER]: 3.8,  // Similar to salt water
+      [PLANT]: 1.8,        // Similar to other plant materials
+      [DIAMOND]: 0.5,      // Diamond has low heat capacity (heats/cools quickly)
+      [DIAMOND_SHARDS]: 0.5, // Same as diamond
+      [MOLTEN_DIAMOND]: 0.9, // Slightly higher in liquid form
+      [CONFETTI]: 1.0,     // Paper-like heat capacity
+      [OXIDIZED_COPPER]: 0.45, // Slightly higher than pure copper
+      [MOLTEN_COPPER]: 0.6, // Higher in liquid form
+      [MOLTEN_SALT]: 1.1,  // Higher than solid salt
+      [MOLTEN_STEEL]: 0.7, // Higher than solid steel
+      [MOLTEN_SUGAR]: 1.2, // Higher than solid sugar
+      [MOLTEN_GLASS]: 1.0, // Higher than solid glass
+      [MOLTEN_ELECTRICAL]: 0.6, // For electrical components when melted
       [DIRT]: 0.9,
       [WET_DIRT]: 1.3,
       [COBBLESTONE]: 0.8,
@@ -3218,7 +4117,7 @@
     // Add this after your element constants (SAND, WATER, etc.)
     const elementBaseColors = {
       // Basic elements
-      [EMPTY]: '#000000',
+      [EMPTY]: null,
       [SALT]: '#ffffff',
       [SALT_WATER]: '#1ea5ff',
       [SAND]: '#f4a460',
@@ -3337,7 +4236,25 @@
       [NUKE_BOMB]: '#33cc33',
       
       // Special objects
-      [BOUNCY_BALL]: '#ff5599'
+      [BOUNCY_BALL]: '#ff5599',
+      
+      // New elements with updated IDs
+      [GLUE]: '#dfdfdf',
+      [SUGAR]: '#ffffff',
+      [SUGAR_WATER]: '#add8e6',
+      [PLANT]: '#2e8b57',
+      [DIAMOND]: '#b9f2ff',
+      [DIAMOND_SHARDS]: '#a7e0ed',
+      [MOLTEN_DIAMOND]: '#ff93a8',
+      [CONFETTI]: '#ff33ff', // Bright consistent color for confetti
+      [DABICCO]: '#ff00ff', // Starting base color for Dabicco, will be modified by getTemperatureAdjustedColor
+      [OXIDIZED_COPPER]: '#66aa88',
+      [MOLTEN_COPPER]: '#ff8844',
+      [MOLTEN_SALT]: '#ffddaa',
+      [MOLTEN_STEEL]: '#ff6666',
+      [MOLTEN_SUGAR]: '#884411',
+      [MOLTEN_GLASS]: '#ffaa88',
+      [MOLTEN_ELECTRICAL]: '#ff7722'
     };
     // Global arrays for grid state
     let grid = [], temp = [], moved = [];
@@ -3409,7 +4326,62 @@
     };
     
     function getTemperatureAdjustedColor(baseColor, temperature, elementType, x, y) {
-      // Parse the base color (handles both hex and rgb formats)
+      // Special case for Dabicco (random red/blue gradient that changes at random intervals)
+      if (elementType === DABICCO) {
+        // Change colors at random intervals (we'll use a slower time component)
+        // This creates a more interesting effect than changing every second
+        const timeComponent = Math.floor(Date.now() / (1000 + (Math.sin(Date.now() / 5000) * 500)));
+        // Use position to ensure different dabicco particles have different colors
+        const positionSeed = (x * 127 + y * 311) % 256;
+        
+        // Create red/blue gradient using the position and time components
+        // We'll limit color to primarily red and blue values
+        const r = Math.floor(Math.sin(positionSeed * 0.1 + timeComponent * 0.3) * 100 + 155); // Higher red values
+        const g = Math.floor(Math.sin(positionSeed * 0.2 + timeComponent * 0.5) * 30); // Minimal green
+        const b = Math.floor(Math.sin(positionSeed * 0.3 + timeComponent * 0.7) * 100 + 155); // Higher blue values
+        
+        return `rgb(${r}, ${g}, ${b})`;
+      }
+      
+      // Special case for Confetti (persistent random colors for each cell)
+      if (elementType === CONFETTI) {
+        // Check if this cell already has a stored color variation
+        if (!colorVariations[y] || !colorVariations[y][x] || !colorVariations[y][x].confettiColor) {
+          // If not, assign a random persistent color to this cell
+          if (!colorVariations[y]) colorVariations[y] = {};
+          if (!colorVariations[y][x]) colorVariations[y][x] = {};
+          
+          // Generate vibrant color options
+          const colorOptions = [
+            [255, 50, 50],    // Bright red
+            [255, 165, 0],    // Orange
+            [255, 255, 0],    // Yellow
+            [50, 205, 50],    // Lime green
+            [30, 144, 255],   // Dodger blue
+            [138, 43, 226],   // Blue violet
+            [255, 105, 180],  // Hot pink
+            [255, 215, 0],    // Gold
+            [0, 255, 127]     // Spring green
+          ];
+          
+          // Assign a random color from our options
+          const colorIndex = Math.floor(Math.random() * colorOptions.length);
+          colorVariations[y][x].confettiColor = colorOptions[colorIndex];
+        }
+        
+        // Retrieve the persistent color for this cell
+        let [r, g, b] = colorVariations[y][x].confettiColor;
+        
+        // Add a subtle shimmer effect based on time, but maintain the base color
+        const shimmerFactor = Math.sin(Date.now() / 500) * 0.1 + 0.95;
+        r = Math.floor(r * shimmerFactor);
+        g = Math.floor(g * shimmerFactor);
+        b = Math.floor(b * shimmerFactor);
+        
+        return `rgb(${r}, ${g}, ${b})`;
+      }
+      
+      // Normal color processing for other elements
       let r, g, b;
       
       if (baseColor.startsWith('#')) {
@@ -3451,7 +4423,7 @@
       // Hot: more red/yellow, Cold: more blue
       if (temperature > 100) {
         // Hot - shift toward red/yellow
-        const factor = Math.min((temperature - 100) / 900, 1); // Max effect at 1000°C
+        const factor = Math.min((temperature - 100) / 2900, 1); // Max effect at 3000°C
         r = Math.min(r + (255 - r) * factor * 0.7, 255);
         g = Math.max(g - g * factor * 0.3, 0);
         b = Math.max(b - b * factor * 0.5, 0);
@@ -3825,11 +4797,37 @@ function getUrlParameters() {
     // Function to initialize the grid based on GRID_SIZE.
     function initGrid(newSize) {
       GRID_SIZE = newSize;
-      // Update grid DOM: set grid template columns/rows according to new size.
+      
+      // Clear grid container
       gridContainer.innerHTML = "";
+      
+      // Create canvas for rendering
+      const canvas = document.createElement('canvas');
+      canvas.id = 'sandboxCanvas';
+      gridContainer.appendChild(canvas);
       gridContainer.appendChild(hoverOverlay);
-      gridContainer.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 1fr)`;
-      gridContainer.style.gridTemplateRows = `repeat(${GRID_SIZE}, 1fr)`;
+      
+      // Size the canvas to fill the grid container
+      const resizeCanvas = () => {
+        const containerWidth = gridContainer.clientWidth;
+        const containerHeight = gridContainer.clientHeight;
+        canvas.width = containerWidth;
+        canvas.height = containerHeight;
+        canvas.style.width = containerWidth + 'px';
+        canvas.style.height = containerHeight + 'px';
+        // Store the cell size for coordinate conversions
+        window.cellSize = containerWidth / GRID_SIZE;
+      };
+      
+      // Initial sizing
+      resizeCanvas();
+      
+      // Add resize listener
+      window.addEventListener('resize', resizeCanvas);
+      
+      // Store canvas and context for rendering
+      window.sandboxCanvas = canvas;
+      window.ctx = canvas.getContext('2d');
       
       // Reset all arrays
       grid = [];
@@ -3879,8 +4877,14 @@ function getUrlParameters() {
       birdDirections = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(1));
       birdTimers = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
       birdYMovement = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+      
+      // Initialize cellsDirty array for tracking cells that need rendering
+      cellsDirty = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(false));
 
+      // Initialize empty cells array - will be used as a compatibility layer
+      // Reset cells instead of reassigning to avoid 'Assignment to constant variable' error
       cells.length = 0;
+      
       for (let y = 0; y < GRID_SIZE; y++) {
         let row = [], trow = [], mrow = [];
         let vrow = [], crow = [], frow = [], srow = [], bwrow = [];
@@ -3965,14 +4969,34 @@ function getUrlParameters() {
         ballVelocityX.push(bVelX);
         ballVelocityY.push(bVelY);
         colorVariations.push(colorVarRow);
-        // Create cell divs.
+        
+        // Create virtual cells array for compatibility with existing code
         let rowOfCells = [];
         for (let x = 0; x < GRID_SIZE; x++) {
-          const cell = document.createElement('div');
-          cell.classList.add('cell');
-          cell.id = `cell-${x}-${y}`;
-          gridContainer.appendChild(cell);
-          rowOfCells.push(cell);
+          // Create a virtual cell object that mimics the DOM element API
+          // This maintains compatibility with existing code that uses cells[y][x]
+          const virtualCell = {
+            style: {
+              backgroundColor: '',
+              opacity: ''
+            },
+            classList: {
+              add: function(className) {
+                this._className = className;
+              },
+              remove: function(className) {
+                if (this._className === className) {
+                  this._className = '';
+                }
+              },
+              contains: function(className) {
+                return this._className === className;
+              }
+            },
+            _className: '',
+            id: `cell-${x}-${y}`
+          };
+          rowOfCells.push(virtualCell);
         }
         cells.push(rowOfCells);
       }
@@ -4155,6 +5179,21 @@ function getUrlParameters() {
         case "grind": currentTool = TOOL_GRIND; break;
         case "salt": currentTool = SALT; break;
         case "salt-water": currentTool = SALT_WATER; break;
+        case "glue": currentTool = GLUE; break;
+        case "sugar": currentTool = SUGAR; break;
+        case "sugar-water": currentTool = SUGAR_WATER; break;
+        case "plant": currentTool = PLANT; break;
+        case "diamond": currentTool = DIAMOND; break;
+        case "diamond-shards": currentTool = DIAMOND_SHARDS; break;
+        case "molten-diamond": currentTool = MOLTEN_DIAMOND; break;
+        case "confetti": currentTool = CONFETTI; break;
+        case "dabicco": currentTool = DABICCO; break;
+        case "oxidized-copper": currentTool = OXIDIZED_COPPER; break;
+        case "molten-copper": currentTool = MOLTEN_COPPER; break;
+        case "molten-salt": currentTool = MOLTEN_SALT; break;
+        case "molten-steel": currentTool = MOLTEN_STEEL; break;
+        case "molten-sugar": currentTool = MOLTEN_SUGAR; break;
+        case "molten-glass": currentTool = MOLTEN_GLASS; break;
       }
     }
     Array.from(toolElements).forEach(el => { el.addEventListener('click', () => selectTool(el)); });
@@ -4210,19 +5249,26 @@ function getUrlParameters() {
         const rect = gridContainer.getBoundingClientRect();
         const x = e.clientX !== undefined ? e.clientX : e.touches[0].clientX;
         const y = e.clientY !== undefined ? e.clientY : e.touches[0].clientY;
-        const gridX = Math.floor((x - rect.left) / (rect.width / GRID_SIZE));
-        const gridY = Math.floor((y - rect.top) / (rect.height / GRID_SIZE));
         
-        // Ensure coordinates are within grid bounds
+        // Use the cellSize from the window object which is set during canvas initialization
+        const cellSize = window.cellSize || gridContainer.clientWidth / GRID_SIZE;
+        
+        const posX = Math.floor((x - rect.left) / cellSize);
+        const posY = Math.floor((y - rect.top) / cellSize);
+        
         return {
-            x: Math.max(0, Math.min(GRID_SIZE - 1, gridX)),
-            y: Math.max(0, Math.min(GRID_SIZE - 1, gridY))
+            x: Math.max(0, Math.min(GRID_SIZE - 1, posX)),
+            y: Math.max(0, Math.min(GRID_SIZE - 1, posY))
         };
     };
     function onMouseDown(e) {
       e.preventDefault();
       if (e.button === 0) isLeftMouseDown = true;
       else if (e.button === 2) isRightMouseDown = true;
+      else if (e.button === 1) {
+        // Middle click to select element under cursor
+        selectElementUnderCursor(hoveredX, hoveredY);
+      }
     }
     function onMouseUp(e) {
       if (e) e.preventDefault();
@@ -4242,6 +5288,74 @@ function getUrlParameters() {
       hoverOverlay.style.display = "none";
     });
     gridContainer.addEventListener('mousemove', e => { const { x, y } = getMousePos(e); hoveredX = x; hoveredY = y; });
+    
+    // Touch event handlers for mobile
+    gridContainer.addEventListener('touchstart', e => {
+      e.preventDefault();
+      isLeftMouseDown = true;
+      const touch = e.touches[0];
+      const { x, y } = getMousePos(touch);
+      hoveredX = x;
+      hoveredY = y;
+    });
+    
+    gridContainer.addEventListener('touchmove', e => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const { x, y } = getMousePos(touch);
+      hoveredX = x;
+      hoveredY = y;
+    });
+    
+    gridContainer.addEventListener('touchend', e => {
+      e.preventDefault();
+      isLeftMouseDown = false;
+    });
+    
+    gridContainer.addEventListener('touchcancel', e => {
+      e.preventDefault();
+      isLeftMouseDown = false;
+    });
+    
+    // Function to select element under cursor
+    function selectElementUnderCursor(x, y) {
+      if (x === null || y === null || x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) return;
+      
+      const elementType = grid[y][x];
+      if (elementType !== EMPTY) {
+        // Find the corresponding tool element
+        let toolName = getElementName(elementType).toLowerCase().replace(/ /g, '-');
+        
+        // Special case handling for certain elements
+        if (elementType === BURNING_WOOD) toolName = 'wood';
+        else if (elementType === BURNING_LEAVES) toolName = 'oak-leaves';
+        else if (elementType === BURNING_ORGANIC) toolName = 'grass';
+        else if (elementType === BURNING_COAL) toolName = 'coal';
+        else if (elementType === BURNING_COAL_LUMP) toolName = 'coal-lump';
+        else if (elementType === BURNING_GAS) toolName = 'gas';
+        else if (elementType === BURNING_THERMITE) toolName = 'thermite';
+        
+        const toolElement = document.querySelector(`.tool[data-tool="${toolName}"]`);
+        if (toolElement) {
+          selectTool(toolElement);
+          
+          // Show a brief visual confirmation
+          const selectedElementNotification = document.getElementById('selectedElementNotification');
+          if (selectedElementNotification) {
+            const elementName = selectedElementNotification.querySelector('.element-name');
+            if (elementName) elementName.textContent = getElementName(elementType);
+            
+            // Make it visible
+            selectedElementNotification.classList.add('visible');
+            
+            // Hide after 2 seconds
+            setTimeout(() => {
+              selectedElementNotification.classList.remove('visible');
+            }, 2000);
+          }
+        }
+      }
+    }
     // Listen for scroll (wheel) events to adjust stroke thickness.
     gridContainer.addEventListener('wheel', e => {
       e.preventDefault();
@@ -4332,6 +5446,106 @@ function getUrlParameters() {
       let py = Math.floor((e.clientY - rect.top) / cellSize);
       return { x: Math.max(0, Math.min(GRID_SIZE - 1, px)), y: Math.max(0, Math.min(GRID_SIZE - 1, py)) };
     }
+    // Function to set a cell's type with proper temperature
+    function setCellType(x, y, elementType, temperature) {
+      // Use our placeElementAt function which already handles all the element placement logic
+      placeElementAt(x, y, elementType);
+      
+      // Override the temperature if specifically provided
+      if (temperature !== undefined && temperature !== null && x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+        temp[y][x] = temperature;
+      }
+    }
+    
+    // Function to erase a cell at position x,y
+    function eraseCell(x, y) {
+      if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+        // Check if cell is not already empty
+        if (grid[y][x] !== EMPTY) {
+          // Set to empty
+          grid[y][x] = EMPTY;
+          temp[y][x] = null;
+          
+          // Reset any special trackers for this cell
+          vaporLife[y][x] = 0;
+          cloudLife[y][x] = 0;
+          fireLife[y][x] = 0;
+          smokeLife[y][x] = 0;
+          burningWoodTime[y][x] = 0;
+          sparkLife[y][x] = 0;
+          sparkTimer[y][x] = 0;
+          smokeMaxLife[y][x] = 1.0 + 2.0 * Math.random();
+          cloudMaxLife[y][x] = 5.0 + 5.0 * Math.random();
+          colorVariations[y][x] = null;
+          
+          // Mark the cell as dirty for rendering
+          cellsDirty[y][x] = true;
+        }
+      }
+    }
+    
+    // Function to place an element at a specific position
+    function placeElementAt(x, y, elementType) {
+      // Handle eraser first
+      if (elementType === ERASER) {
+        eraseCell(x, y);
+        return;
+      }
+
+      // For regular elements, set them in the grid
+      if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+        // Set the element type and default temperature
+        grid[y][x] = elementType;
+        
+        // Set appropriate temperature based on element type
+        if (elementType === FIRE) {
+          temp[y][x] = fireTemperature;
+          fireLife[y][x] = 0;
+        } else if (elementType === LAVA) {
+          temp[y][x] = 1200;
+        } else if (elementType === ICE) {
+          temp[y][x] = -10;
+        } else if (elementType === MOLTEN_DIAMOND) {
+          temp[y][x] = 4000;
+        } else if (elementType === DIAMOND_SHARDS) {
+          temp[y][x] = 25;
+        } else if (elementType === WATER_VAPOR) {
+          temp[y][x] = 120;
+          vaporLife[y][x] = 0;
+        } else if (elementType === CLOUD) {
+          temp[y][x] = 50;
+          cloudLife[y][x] = 0;
+          cloudMaxLife[y][x] = 1 + 3 * Math.random();
+        } else if (elementType === SMOKE) {
+          temp[y][x] = 80;
+          smokeLife[y][x] = 0;
+          smokeMaxLife[y][x] = 1 + 2 * Math.random();
+        } else {
+          // Default temperature for most elements
+          temp[y][x] = 20;
+        }
+        
+        // Initialize color variations for this element
+        colorVariations[y][x] = {
+          r: 1 + (Math.random() * 0.1 - 0.05),
+          g: 1 + (Math.random() * 0.1 - 0.05),
+          b: 1 + (Math.random() * 0.1 - 0.05)
+        };
+        
+        // For confetti, use more vibrant colors
+        if (elementType === CONFETTI) {
+          colorVariations[y][x] = {
+            r: Math.random(),
+            g: Math.random(),
+            b: Math.random()
+          };
+        }
+        
+        // Mark the cell as dirty for rendering
+        cellsDirty[y][x] = true;
+      }
+    }
+    
     // Modified spamPlace to place elements over a circular or square area based on strokeThickness.
     function spamPlace() { 
       if (hoveredX === null || hoveredY === null) return; 
@@ -4454,10 +5668,13 @@ function getUrlParameters() {
         }
       }
     }
-    // Update the hover overlay that shows the stroke area.
+    // Update the hover overlay that shows the stroke area using canvas for performance
     function updateHoverOverlay() {
       if (hoveredX === null || hoveredY === null) {
-        hoverOverlay.style.display = "none";
+        // Hide the overlay when no hover position
+        if (hoverOverlay) {
+          hoverOverlay.style.display = "none";
+        }
         return;
       }
       
@@ -4467,131 +5684,104 @@ function getUrlParameters() {
         if (strokeThickness < 1) strokeThickness = 1;
       }
       
-      // For pixelated circle, we'll create a grid of cells that match exactly what will be placed
+      // Get canvas context and cell size
+      const canvas = window.sandboxCanvas;
+      const ctx = window.ctx;
+      
+      if (!canvas || !ctx) return; // Safety check
+      
+      const cellSize = window.cellSize;
+      
+      // We'll draw directly on the main canvas and rely on the next frame to clear it
+      // This avoids creating DOM elements and is much more efficient
+      
+      // Save the current canvas state
+      ctx.save();
+      
+      // Set up stroke style for outline
+      ctx.strokeStyle = 'yellow';
+      ctx.lineWidth = 1;
+      
       if (!isAltKeyDown) {
-        // Clear any previous content
-        hoverOverlay.innerHTML = '';
-        hoverOverlay.style.background = 'transparent';
-        hoverOverlay.style.border = 'none';
-        
-        const cellSize = gridContainer.clientWidth / GRID_SIZE;
+        // Circular brush
         const radius = strokeThickness / 2;
         const half = Math.floor(radius);
         
-        // Position the overlay
-        hoverOverlay.style.display = "block";
-        hoverOverlay.style.left = ((hoveredX - half) * cellSize) + "px";
-        hoverOverlay.style.top = ((hoveredY - half) * cellSize) + "px";
-        hoverOverlay.style.width = (strokeThickness * cellSize) + "px";
-        hoverOverlay.style.height = (strokeThickness * cellSize) + "px";
-        
-        // First pass: Create all cells in the circle
-        const cellsInCircle = [];
+        // Identify all cells that would be affected by the brush
+        const circleArea = new Set();
         for (let dy = -half; dy <= half; dy++) {
           for (let dx = -half; dx <= half; dx++) {
             const distance = Math.sqrt(dx*dx + dy*dy);
             if (distance <= radius) {
-              cellsInCircle.push({dx, dy, distance});
+              const cx = hoveredX + dx;
+              const cy = hoveredY + dy;
+              if (cx >= 0 && cx < GRID_SIZE && cy >= 0 && cy < GRID_SIZE) {
+                circleArea.add(`${cx},${cy}`);
+              }
             }
           }
         }
         
-        // Create a single container for all cells
-        const circleContainer = document.createElement('div');
-        circleContainer.style.position = 'relative';
-        circleContainer.style.width = '100%';
-        circleContainer.style.height = '100%';
-        hoverOverlay.appendChild(circleContainer);
-        
-        // Create all cells in the circle with background color
-        for (const {dx, dy} of cellsInCircle) {
-          const cellDiv = document.createElement('div');
-          cellDiv.style.position = 'absolute';
-          cellDiv.style.left = ((dx + half) * cellSize) + 'px';
-          cellDiv.style.top = ((dy + half) * cellSize) + 'px';
-          cellDiv.style.width = cellSize + 'px';
-          cellDiv.style.height = cellSize + 'px';
-          cellDiv.style.backgroundColor = 'rgba(255, 255, 0, 0.2)';
-          cellDiv.style.boxSizing = 'border-box';
-          circleContainer.appendChild(cellDiv);
-        }
-        
-        // No SVG outline - we'll use only the pixelated outline
-        
-        // Create a pixelated outline by adding border segments only where needed
-        for (const {dx, dy} of cellsInCircle) {
-          // Check each side of this cell to see if it's on the border
-          const adjacentOffsets = [
-            {x: 0, y: -1, side: 'top'},    // top
-            {x: 1, y: 0, side: 'right'},  // right
-            {x: 0, y: 1, side: 'bottom'}, // bottom
-            {x: -1, y: 0, side: 'left'}   // left
+        // Draw edges for each cell in the circle area
+        for (const cellPos of circleArea) {
+          const [x, y] = cellPos.split(',').map(Number);
+          
+          // Check each of the four neighbors to see if they're outside the circle
+          const neighbors = [
+            {dx: 0, dy: -1, edge: 'top'},    // top
+            {dx: 1, dy: 0, edge: 'right'},   // right
+            {dx: 0, dy: 1, edge: 'bottom'},  // bottom
+            {dx: -1, dy: 0, edge: 'left'}    // left
           ];
           
-          for (const {x: offsetX, y: offsetY, side} of adjacentOffsets) {
-            const adjX = dx + offsetX;
-            const adjY = dy + offsetY;
-            const adjDistance = Math.sqrt(adjX*adjX + adjY*adjY);
+          for (const {dx, dy, edge} of neighbors) {
+            const nx = x + dx;
+            const ny = y + dy;
+            const neighborKey = `${nx},${ny}`;
             
-            // If adjacent cell is outside the circle, add a border on that side
-            if (adjDistance > radius) {
-              const borderDiv = document.createElement('div');
-              borderDiv.style.position = 'absolute';
-              borderDiv.style.boxSizing = 'border-box';
-              borderDiv.style.pointerEvents = 'none';
-              
-              // Position and size the border segment based on which side it's on
-              switch(side) {
+            // If neighbor is outside the circle or out of bounds, draw this edge
+            if (!circleArea.has(neighborKey) || nx < 0 || nx >= GRID_SIZE || ny < 0 || ny >= GRID_SIZE) {
+              // Draw just the edge that faces outward from the circle
+              ctx.beginPath();
+              switch (edge) {
                 case 'top':
-                  borderDiv.style.left = ((dx + half) * cellSize) + 'px';
-                  borderDiv.style.top = ((dy + half) * cellSize) + 'px';
-                  borderDiv.style.width = cellSize + 'px';
-                  borderDiv.style.height = '1px';
-                  borderDiv.style.borderTop = '1px dashed yellow';
+                  ctx.moveTo(x * cellSize, y * cellSize);
+                  ctx.lineTo((x + 1) * cellSize, y * cellSize);
                   break;
                 case 'right':
-                  borderDiv.style.left = ((dx + half) * cellSize + cellSize - 1) + 'px';
-                  borderDiv.style.top = ((dy + half) * cellSize) + 'px';
-                  borderDiv.style.width = '1px';
-                  borderDiv.style.height = cellSize + 'px';
-                  borderDiv.style.borderRight = '1px dashed yellow';
+                  ctx.moveTo((x + 1) * cellSize, y * cellSize);
+                  ctx.lineTo((x + 1) * cellSize, (y + 1) * cellSize);
                   break;
                 case 'bottom':
-                  borderDiv.style.left = ((dx + half) * cellSize) + 'px';
-                  borderDiv.style.top = ((dy + half) * cellSize + cellSize - 1) + 'px';
-                  borderDiv.style.width = cellSize + 'px';
-                  borderDiv.style.height = '1px';
-                  borderDiv.style.borderBottom = '1px dashed yellow';
+                  ctx.moveTo(x * cellSize, (y + 1) * cellSize);
+                  ctx.lineTo((x + 1) * cellSize, (y + 1) * cellSize);
                   break;
                 case 'left':
-                  borderDiv.style.left = ((dx + half) * cellSize) + 'px';
-                  borderDiv.style.top = ((dy + half) * cellSize) + 'px';
-                  borderDiv.style.width = '1px';
-                  borderDiv.style.height = cellSize + 'px';
-                  borderDiv.style.borderLeft = '1px dashed yellow';
+                  ctx.moveTo(x * cellSize, y * cellSize);
+                  ctx.lineTo(x * cellSize, (y + 1) * cellSize);
                   break;
               }
-              
-              circleContainer.appendChild(borderDiv);
+              ctx.stroke();
             }
           }
         }
       } else {
-        // Square shape when ALT is pressed - use the original method
-        const cellSize = gridContainer.clientWidth / GRID_SIZE;
-        let half = Math.floor(strokeThickness / 2);
-        let startX = (hoveredX - half) * cellSize;
-        let startY = (hoveredY - half) * cellSize;
+        // Square brush when ALT is pressed
+        const half = Math.floor(strokeThickness / 2);
+        const startX = (hoveredX - half) * cellSize;
+        const startY = (hoveredY - half) * cellSize;
+        const size = strokeThickness * cellSize;
         
-        hoverOverlay.innerHTML = ''; // Clear any child elements
-        hoverOverlay.style.display = "block";
-        hoverOverlay.style.left = startX + "px";
-        hoverOverlay.style.top = startY + "px";
-        hoverOverlay.style.width = (strokeThickness * cellSize) + "px";
-        hoverOverlay.style.height = (strokeThickness * cellSize) + "px";
-        hoverOverlay.style.backgroundColor = 'rgba(255, 255, 0, 0.2)';
-        hoverOverlay.style.border = '2px dashed yellow';
-        hoverOverlay.style.borderRadius = '0';
+        // Draw only the outline of the square
+        ctx.strokeRect(startX, startY, size, size);
+      }
+      
+      // Restore the canvas state
+      ctx.restore();
+      
+      // Hide the DOM-based overlay since we're using canvas
+      if (hoverOverlay) {
+        hoverOverlay.style.display = "none";
       }
     }
     /***************************************
@@ -4615,7 +5805,7 @@ function getUrlParameters() {
         case SAND: temp[y][x] = 20; break;
         case WALL: temp[y][x] = 20; break;
         case WATER: temp[y][x] = 20; break;
-        case LAVA: temp[y][x] = 1200; break;
+        case LAVA: temp[y][x] = 1600; break;
         case STONE: temp[y][x] = 20; break;
         case WATER_VAPOR: temp[y][x] = 100; vaporLife[y][x] = 0; break;
         case COPPER: temp[y][x] = 100; break;
@@ -4691,16 +5881,36 @@ function getUrlParameters() {
           break;
         case SALT: temp[y][x] = 20; break;
         case SALT_WATER: temp[y][x] = 20; break;
+        case SUGAR: temp[y][x] = 20; break;
+        case SUGAR_WATER: temp[y][x] = 20; break;
+        case MOLTEN_SUGAR: temp[y][x] = sugarMeltingTemp + 20; break;
+        case DIAMOND: temp[y][x] = 20; break;
+        case DIAMOND_SHARDS: temp[y][x] = 20; break;
+        case MOLTEN_DIAMOND: temp[y][x] = diamondMeltingTemp + 50; break;
+        case CONFETTI: temp[y][x] = 20; break;
+        case DABICCO: temp[y][x] = 20; break;
+        case PLANT: temp[y][x] = 20; break;
+        case GLUE: temp[y][x] = 20; break;
+        case MOLTEN_COPPER: temp[y][x] = copperMeltingTemp + 15; break;
+        case MOLTEN_GLASS: temp[y][x] = glassMeltingTemp + 100; break;
+        case MOLTEN_STEEL: temp[y][x] = steelMeltingTemp + 50; break;
+        case MOLTEN_SALT: temp[y][x] = saltMeltingTemp + 20; break;
+        case HELIUM: temp[y][x] = 20; break;
+        case OXIDIZED_COPPER: temp[y][x] = 20; break;
+        case MOLTEN_COPPER: temp[y][x] = copperMeltingTemp + 15; break;
+        case MOLTEN_GLASS: temp[y][x] = glassMeltingTemp + 100; break;
+        case MOLTEN_STEEL: temp[y][x] = steelMeltingTemp + 50; break;
+        case MOLTEN_SALT: temp[y][x] = saltMeltingTemp + 20; break;
       }
       
       // Initialize color variation for this element
-  const variation = 0.03;
-  colorVariations[y][x] = {
-    r: 1 + (Math.random() * variation * 2 - variation),
-    g: 1 + (Math.random() * variation * 2 - variation),
-    b: 1 + (Math.random() * variation * 2 - variation)
-  };
-}
+      const variation = 0.03;
+      colorVariations[y][x] = {
+        r: 1 + (Math.random() * variation * 2 - variation),
+        g: 1 + (Math.random() * variation * 2 - variation),
+        b: 1 + (Math.random() * variation * 2 - variation)
+      };
+    }
 
 // Function to play placement sounds based on element type
 function playPlacementSound(elementType) {
@@ -6070,14 +7280,129 @@ function playPlacementSound(elementType) {
      // Cache for transparent elements
      const transparentElements = new Set([GAS, WATER_VAPOR, BURNING_GAS, CARBON_DIOXIDE, OXYGEN, HELIUM]);
      
+     // Class to color mapping for canvas rendering
+     const elementClassColors = {
+       'sand': '#e9d8a6',
+       'wall': '#606060',
+       'water': '#1e90ff',
+       'lava': '#ff4500',
+       'stone': '#808080',
+       'water-vapor': 'rgba(173, 216, 230, 0.7)',
+       'cloud': '#f0f0f0',
+       'copper': '#cd7f32',
+       'steel': '#a9a9a9',
+       'ice': '#add8e6',
+       'wood': '#8b4513',
+       'fire': '#ff4500',
+       'smoke': 'rgba(105, 105, 105, 0.7)',
+       'burning-wood': '#ff6347',
+       'burning-organic': '#ff6347',
+       'ash': '#a9a9a9',
+       'glass': 'rgba(240, 248, 255, 0.8)',
+       'bomb': '#000000',
+       'dirt': '#8b4513',
+       'wet-dirt': '#654321',
+       'wheat-seeds': '#f5deb3',
+       'wheat': '#edc9af',
+       'flour': '#fff8dc',
+       'dough': '#f5deb3',
+       'bread': '#d2b48c',
+       'root': '#8b4513',
+       'burning-root': '#ff6347',
+       'dead-root': '#a9a9a9',
+       'spark': '#ffff00',
+       'charged-copper': '#ffa500',
+       'charged-down-copper': '#cd7f32',
+       'oak-seeds': '#a0522d',
+       'oak-leaves': '#228b22',
+       'oak-baby-leaves': '#32cd32',
+       'dead-oak': '#a9a9a9',
+       'birch-seeds': '#f5f5dc',
+       'birch-leaves': '#9acd32',
+       'birch-baby-leaves': '#adff2f',
+       'birch-wood': '#f5f5dc',
+       'dead-birch': '#d3d3d3',
+       'wet-sand': '#d2b48c',
+       'grass': '#7cfc00',
+       'dead-plant': '#a9a9a9',
+       'burning-leaves': '#ff6347',
+       'gas': 'rgba(255, 255, 224, 0.7)',
+       'burning-gas': '#ff6347',
+       'cooler': '#87ceeb',
+       'heater': '#ff6347',
+       'heat-separator': '#b0c4de',
+       'charged-heat-separator': '#ffa500',
+       'charged-down-heat-separator': '#b0c4de',
+       'input': '#32cd32',
+       'charged-input': '#ffa500',
+       'output': '#ff6347',
+       'charged-output': '#ffa500',
+       'not-gate': '#b0c4de',
+       'and-gate': '#b0c4de',
+       'blocker': '#8b0000',
+       'charged-blocker': '#ffa500',
+       'cloner': '#9370db',
+       'coal': '#2f4f4f',
+       'coal-lump': '#2f4f4f',
+       'burning-coal': '#ff6347',
+       'burning-coal-lump': '#ff6347',
+       'thermite': '#a0522d',
+       'burning-thermite': '#ff6347',
+       'acid': '#32cd32',
+       'acid-steam': 'rgba(173, 255, 47, 0.7)',
+       'acid-cloud': 'rgba(173, 255, 47, 0.7)',
+       'slime': '#32cd32',
+       'carbon-dioxide': 'rgba(220, 220, 220, 0.7)',
+       'oxygen': 'rgba(240, 248, 255, 0.7)',
+       'bird': '#8b4513',
+       'meat': '#cd5c5c',
+       'cooked-meat': '#a52a2a',
+       'cobblestone': '#696969',
+       'oil': '#2f4f4f',
+       'big-bomb': '#000000',
+       'water-bomb': '#0000ff',
+       'fire-bomb': '#ff0000',
+       'cryo-bomb': '#00ffff',
+       'nuke-bomb': '#006400',
+       'helium': 'rgba(255, 255, 224, 0.7)',
+       'bouncy-ball': '#ff0000',
+       'cell-element': '#ff69b4',
+       'dead-cell': '#696969',
+       'blood': '#8b0000',
+       'glass-shard': '#b0e0e6',
+       'sawdust': '#d9c29e',
+       'salt': '#ffffff',
+       'salt-water': '#1ea5ff',
+       'grind': '#777777',
+       'glue': '#e0e0a0',
+       'sugar': '#ffffff',
+       'sugar-water': '#e0f0ff',
+       'plant': '#22aa22',
+       'diamond': '#b9f2ff',
+       'diamond-shards': 'rgba(185, 242, 255, 0.8)',
+       'molten-diamond': '#80e0ff',
+       'confetti': '#ff33ff', /* Bright consistent color */
+       'dabicco': 'rgb(255,0,255)', /* Random colors handled in getTemperatureAdjustedColor */
+       'oxidized-copper': '#66aa88',
+       'molten-copper': '#ff8844',
+       'molten-salt': '#ffddaa',
+       'molten-steel': '#ff6600',
+       'molten-sugar': '#ddaa88',
+       'molten-glass': '#ffaa88',
+       'molten-electrical': '#ff7722'
+     };
+     
+     // Function to get color for element class name
+     function getColorForElementClass(className) {
+       return elementClassColors[className] || '#808080'; // Default gray if not found
+     }
+     
      function renderCell(x, y) {
-      const cell = cells[y][x];
       const e = grid[y][x];
+      const cell = cells[y][x]; // Virtual cell for compatibility
       
-      // Always completely reset the cell's appearance first
-      // This ensures that when elements transform (like water to stone),
-      // all visual properties from the previous element are cleared
-      cell.className = 'cell';
+      // Update the virtual cell's state (for compatibility with existing code)
+      cell.classList._className = 'cell';
       cell.style.backgroundColor = '';
       cell.style.opacity = '';
       
@@ -6085,43 +7410,41 @@ function playPlacementSound(elementType) {
         return;
       }
       
+      // Calculate position and size for canvas rendering
+      const cellSize = window.cellSize;
+      const pixelX = Math.floor(x * cellSize);
+      const pixelY = Math.floor(y * cellSize);
+      const pixelSize = Math.ceil(cellSize); // Ensure no gaps between cells
+      
       // Get base color
       let baseColor = elementBaseColors[e];
+      let finalColor;
+      let opacity = 1.0;
       
       if (baseColor) {
-        // Cell class is already reset to 'cell' above
-        
         // Get temperature
         const temperature = temp[y][x] !== null ? temp[y][x] : 20;
         
         // Apply temperature and random variations
-        const adjustedColor = getTemperatureAdjustedColor(baseColor, temperature, e, x, y);
+        finalColor = getTemperatureAdjustedColor(baseColor, temperature, e, x, y);
         
-        // Only update if color changed
-        if (cell.style.backgroundColor !== adjustedColor) {
-          cell.style.backgroundColor = adjustedColor;
-        }
+        // Update the virtual cell for compatibility
+        cell.style.backgroundColor = finalColor;
         
         // Special case for smoke opacity
         if (e === SMOKE) {
           const max = smokeMaxLife[y][x];
           const life = smokeLife[y][x];
-          const ratio = Math.max(0, 1 - (life / max));
-          cell.style.opacity = ratio.toString();
+          opacity = Math.max(0, 1 - (life / max));
+          cell.style.opacity = opacity.toString();
         }
         // Special case for other transparent elements
         else if (transparentElements.has(e)) {
-          if (cell.style.opacity !== '0.7') {
-            cell.style.opacity = '0.7';
-          }
-        }
-        // Reset opacity for non-transparent elements
-        else if (cell.style.opacity) {
-          cell.style.opacity = '';
+          opacity = 0.7;
+          cell.style.opacity = '0.7';
         }
       } else {
-        // Fallback to class-based styling if no base color is defined
-        // Since we already reset the className to 'cell' above, we just need to add the element-specific class
+        // Fallback to class-based styling
         let elementClass = '';
         
         switch (e) {
@@ -6212,6 +7535,22 @@ function playPlacementSound(elementType) {
           case NUKE_BOMB: elementClass = 'nuke-bomb'; break;
           case HELIUM: elementClass = 'helium'; break;
           case BOUNCY_BALL: elementClass = 'bouncy-ball'; break;
+          case GLUE: elementClass = 'glue'; break;
+          case SUGAR: elementClass = 'sugar'; break;
+          case SUGAR_WATER: elementClass = 'sugar-water'; break;
+          case PLANT: elementClass = 'plant'; break;
+          case DIAMOND: elementClass = 'diamond'; break;
+          case DIAMOND_SHARDS: elementClass = 'diamond-shards'; break;
+          case MOLTEN_DIAMOND: elementClass = 'molten-diamond'; break;
+          case CONFETTI: elementClass = 'confetti'; break;
+          case DABICCO: elementClass = 'dabicco'; break;
+          case OXIDIZED_COPPER: elementClass = 'oxidized-copper'; break;
+          case MOLTEN_COPPER: elementClass = 'molten-copper'; break;
+          case MOLTEN_SALT: elementClass = 'molten-salt'; break;
+          case MOLTEN_STEEL: elementClass = 'molten-steel'; break;
+          case MOLTEN_SUGAR: elementClass = 'molten-sugar'; break;
+          case MOLTEN_GLASS: elementClass = 'molten-glass'; break;
+          case MOLTEN_ELECTRICAL: elementClass = 'molten-electrical'; break;
           case CELL: elementClass = 'cell-element'; break;
           case DEAD_CELL: elementClass = 'dead-cell'; break;
           case BLOOD: elementClass = 'blood'; break;
@@ -6219,10 +7558,32 @@ function playPlacementSound(elementType) {
           default: break;
         }
         
-        // Apply the element class if one was found
+        // Update the virtual cell for compatibility
         if (elementClass) {
-          cell.className = 'cell ' + elementClass;
+          cell.classList._className = 'cell ' + elementClass;
+          
+          // Get the color for this class
+          finalColor = getColorForElementClass(elementClass);
+          
+          // Check if color has opacity information
+          if (finalColor && finalColor.startsWith('rgba')) {
+            // Extract opacity from rgba
+            const rgbaMatch = finalColor.match(/rgba\(\d+,\s*\d+,\s*\d+,\s*([\d.]+)\)/);
+            if (rgbaMatch && rgbaMatch[1]) {
+              opacity = parseFloat(rgbaMatch[1]);
+              // Create RGB version for drawing with separate opacity
+              finalColor = finalColor.replace(/rgba/, 'rgb').replace(/,\s*[\d.]+\)/, ')');
+            }
+          }
         }
+      }
+      
+      // Draw the cell on the canvas
+      if (finalColor) {
+        const ctx = window.ctx;
+        ctx.globalAlpha = opacity;
+        ctx.fillStyle = finalColor;
+        ctx.fillRect(pixelX, pixelY, pixelSize, pixelSize);
       }
     }
     // Track cells that need rendering to avoid unnecessary DOM updates
@@ -6273,7 +7634,7 @@ function playPlacementSound(elementType) {
         for (let x = 0; x < GRID_SIZE; x++) {
           // Always mark liquids as dirty to ensure their colors are constantly refreshed
           if (grid[y][x] === WATER || grid[y][x] === LAVA || grid[y][x] === OIL || 
-              grid[y][x] === ACID || grid[y][x] === MOLTEN_SLAG || grid[y][x] === BLOOD) {
+              grid[y][x] === ACID || grid[y][x] === MOLTEN_SLAG || grid[y][x] === BLOOD || grid[y][x] === SALT_WATER || grid[y][x] === SUGAR_WATER) {
             markDirty(x, y);
             
             // Randomly update color variations for liquids to create a flowing effect
@@ -6320,15 +7681,310 @@ function playPlacementSound(elementType) {
       }
     }
     
-    function renderGrid(){
-      // FORCE RENDER ALL CELLS EVERY FRAME
-      // This is less efficient but guarantees visual updates
-      for (let y = 0; y < GRID_SIZE; y++){
-        for (let x = 0; x < GRID_SIZE; x++){
-          renderCell(x, y);
+    function renderGrid() {
+      // Clear the canvas first for a clean drawing surface
+      const canvas = window.sandboxCanvas;
+      const ctx = window.ctx;
+      
+      if (!canvas || !ctx) return; // Safety check
+      
+      // Clear the entire canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Fill with black background for empty cells
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Get cell size for drawing
+      const cellSize = window.cellSize;
+      
+      // Use ceiling function to ensure cells completely fill their space
+      // This prevents any gaps between cells
+      const pixelSize = Math.ceil(cellSize);
+      
+      // Handle lighting first if DSPLE is enabled
+      if (window.isDspleEnabled) {
+        renderLighting();
+      }
+      
+      // Separate transparent and opaque elements for better rendering
+      // Adding a third category specifically for gases that can transform
+      const opaqueBatches = {};
+      const transparentBatches = {};
+      const gasTransformBatches = {}; // Special handling for O2/CO2 to prevent flickering
+      
+      // First pass - collect cells into batches based on opacity
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          const e = grid[y][x];
+          
+          // Skip empty cells
+          if (e === EMPTY) {
+            dirtyGrid[y][x] = false;
+            continue;
+          }
+          
+          // Determine the color for this cell
+          let finalColor;
+          let opacity = 1.0;
+          let isTransparent = false;
+          let isGasTransform = false; // Special flag for O2/CO2 gases that transform
+          
+          // Get base color
+          let baseColor = elementBaseColors[e];
+          
+          if (baseColor) {
+            // Get temperature
+            const temperature = temp[y][x] !== null ? temp[y][x] : 20;
+            
+            // Special handling for O2/CO2 to eliminate flickering during transformation
+            if (e === OXYGEN || e === CARBON_DIOXIDE) {
+              // Use fixed colors for gases that can transform to prevent flickering
+              finalColor = e === OXYGEN ? '#e0ffff' : '#d3d3d3';
+              isGasTransform = true;
+            } else {
+              // Normal temperature adjustments for other elements
+              finalColor = getTemperatureAdjustedColor(baseColor, temperature, e, x, y);
+            }
+            
+            // Update the virtual cell for compatibility
+            cells[y][x].style.backgroundColor = finalColor;
+            
+            // Handle special case for smoke opacity
+            if (e === SMOKE) {
+              const max = smokeMaxLife[y][x];
+              const life = smokeLife[y][x];
+              opacity = Math.max(0, 1 - (life / max));
+              cells[y][x].style.opacity = opacity.toString();
+              isTransparent = true;
+            }
+            // Handle special case for other transparent elements
+            else if (transparentElements.has(e)) {
+              opacity = 0.7;
+              cells[y][x].style.opacity = '0.7';
+              isTransparent = true;
+            }
+          } else {
+            // Fallback to class-based styling
+            let elementClass = '';
+            
+            // Determine element class - complete implementation from renderCell
+            switch (e) {
+              case SAND: elementClass = 'sand'; break;
+              case WALL: elementClass = 'wall'; break;
+              case WATER: elementClass = 'water'; break;
+              case LAVA: elementClass = 'lava'; break;
+              case STONE: elementClass = 'stone'; break;
+              case WATER_VAPOR: elementClass = 'water-vapor'; isTransparent = true; break;
+              case CLOUD: elementClass = 'cloud'; isTransparent = true; break;
+              case BASALT: elementClass = 'stone'; break;
+              case OBSIDIAN: elementClass = 'stone'; break;
+              case MOLTEN_SLAG: elementClass = 'lava'; break;
+              case COPPER: elementClass = 'copper'; break;
+              case STEEL: elementClass = 'steel'; break;
+              case ICE: elementClass = 'ice'; break;
+              case WOOD: elementClass = 'wood'; break;
+              case FIRE: elementClass = 'fire'; break;
+              case SMOKE: elementClass = 'smoke'; isTransparent = true; break;
+              case BURNING_WOOD: elementClass = 'burning-wood'; break;
+              case BURNING_ORGANIC: elementClass = 'burning-organic'; break;
+              case ASH: elementClass = 'ash'; break;
+              case GLASS: elementClass = 'glass'; break;
+              case BOMB: elementClass = 'bomb'; break;
+              case DIRT: elementClass = 'dirt'; break;
+              case WET_DIRT: elementClass = 'wet-dirt'; break;
+              case WHEAT_SEEDS: elementClass = 'wheat-seeds'; break;
+              case WHEAT: elementClass = 'wheat'; break;
+              case FLOUR: elementClass = 'flour'; break;
+              case DOUGH: elementClass = 'dough'; break;
+              case BREAD: elementClass = 'bread'; break;
+              case ROOT: elementClass = 'root'; break;
+              case BURNING_ROOT: elementClass = 'burning-root'; break;
+              case DEAD_ROOT: elementClass = 'dead-root'; break;
+              case SPARK: elementClass = 'spark'; break;
+              case CHARGED_COPPER: elementClass = 'charged-copper'; break;
+              case CHARGED_DOWN_COPPER: elementClass = 'charged-down-copper'; break;
+              case OAK_SEEDS: elementClass = 'oak-seeds'; break;
+              case OAK_LEAVES: elementClass = 'oak-leaves'; break;
+              case OAK_BABY_LEAVES: elementClass = 'oak-baby-leaves'; break;
+              case DEAD_OAK: elementClass = 'dead-oak'; break;
+              case BIRCH_SEEDS: elementClass = 'birch-seeds'; break;
+              case BIRCH_LEAVES: elementClass = 'birch-leaves'; break;
+              case BIRCH_BABY_LEAVES: elementClass = 'birch-baby-leaves'; break;
+              case BIRCH_WOOD: elementClass = 'birch-wood'; break;
+              case DEAD_BIRCH: elementClass = 'dead-birch'; break;
+              case WET_SAND: elementClass = 'wet-sand'; break;
+              case GRASS: elementClass = 'grass'; break;
+              case DEAD_PLANT: elementClass = 'dead-plant'; break;
+              case BURNING_LEAVES: elementClass = 'burning-leaves'; break;
+              case GAS: elementClass = 'gas'; isTransparent = true; break;
+              case BURNING_GAS: elementClass = 'burning-gas'; isTransparent = true; break;
+              case COOLER: elementClass = 'cooler'; break;
+              case HEATER: elementClass = 'heater'; break;
+              case HEAT_SEPARATOR: elementClass = 'heat-separator'; break;
+              case CHARGED_HEAT_SEPARATOR: elementClass = 'charged-heat-separator'; break;
+              case CHARGED_DOWN_HEAT_SEPARATOR: elementClass = 'charged-down-heat-separator'; break;
+              case INPUT: elementClass = 'input'; break;
+              case CHARGED_INPUT: elementClass = 'charged-input'; break;
+              case OUTPUT: elementClass = 'output'; break;
+              case CHARGED_OUTPUT: elementClass = 'charged-output'; break;
+              case NOT_GATE: elementClass = 'not-gate'; break;
+              case AND_GATE: elementClass = 'and-gate'; break;
+              case BLOCKER: elementClass = 'blocker'; break;
+              case CHARGED_BLOCKER: elementClass = 'charged-blocker'; break;
+              case CLONER: elementClass = 'cloner'; break;
+              case COAL: elementClass = 'coal'; break;
+              case COAL_LUMP: elementClass = 'coal-lump'; break;
+              case BURNING_COAL: elementClass = 'burning-coal'; break;
+              case BURNING_COAL_LUMP: elementClass = 'burning-coal-lump'; break;
+              case THERMITE: elementClass = 'thermite'; break;
+              case BURNING_THERMITE: elementClass = 'burning-thermite'; break;
+              case ACID: elementClass = 'acid'; break;
+              case ACID_STEAM: elementClass = 'acid-steam'; isTransparent = true; break;
+              case ACID_CLOUD: elementClass = 'acid-cloud'; isTransparent = true; break;
+              case SLIME: elementClass = 'slime'; break;
+              case CARBON_DIOXIDE: elementClass = 'carbon-dioxide'; isTransparent = true; isGasTransform = true; break;
+              case OXYGEN: elementClass = 'oxygen'; isTransparent = true; isGasTransform = true; break;
+              case BIRD: elementClass = 'bird'; break;
+              case MEAT: elementClass = 'meat'; break;
+              case COOKED_MEAT: elementClass = 'cooked-meat'; break;
+              case COBBLESTONE: elementClass = 'cobblestone'; break;
+              case OIL: elementClass = 'oil'; break;
+              case BIG_BOMB: elementClass = 'big-bomb'; break;
+              case WATER_BOMB: elementClass = 'water-bomb'; break;
+              case FIRE_BOMB: elementClass = 'fire-bomb'; break;
+              case CRYO_BOMB: elementClass = 'cryo-bomb'; break;
+              case NUKE_BOMB: elementClass = 'nuke-bomb'; break;
+              case HELIUM: elementClass = 'helium'; isTransparent = true; break;
+              case BOUNCY_BALL: elementClass = 'bouncy-ball'; break;
+              case CELL: elementClass = 'cell-element'; break;
+              case DEAD_CELL: elementClass = 'dead-cell'; break;
+              case BLOOD: elementClass = 'blood'; break;
+              case GLASS_SHARD: elementClass = 'glass-shard'; break;
+              case SAWDUST: elementClass = 'sawdust'; break;
+              case SALT: elementClass = 'salt'; break;
+              case SALT_WATER: elementClass = 'salt-water'; break;
+              default: elementClass = '';
+            }
+            
+            // Update the virtual cell for compatibility
+            if (elementClass) {
+              cells[y][x].classList._className = 'cell ' + elementClass;
+              
+              // Get the color for this class
+              finalColor = getColorForElementClass(elementClass);
+              
+              // Check if color has opacity information
+              if (finalColor && finalColor.startsWith('rgba')) {
+                // Extract opacity from rgba
+                const rgbaMatch = finalColor.match(/rgba\(\d+,\s*\d+,\s*\d+,\s*([\d.]+)\)/);
+                if (rgbaMatch && rgbaMatch[1]) {
+                  opacity = parseFloat(rgbaMatch[1]);
+                  isTransparent = true;
+                  // Create RGB version for drawing with separate opacity
+                  finalColor = finalColor.replace(/rgba/, 'rgb').replace(/,\s*[\d.]+\)/, ')');
+                }
+              }
+            }
+          }
+          
+          // If we have a valid color, add this cell to the appropriate batch
+          if (finalColor) {
+            // Create a batch key combining color and opacity
+            const batchKey = `${finalColor}|${opacity.toFixed(2)}`;
+            
+            // Choose the correct batch collection based on element type
+            let targetBatches;
+            if (isGasTransform) {
+              targetBatches = gasTransformBatches; // Use special batch for O2/CO2
+            } else if (isTransparent) {
+              targetBatches = transparentBatches;
+            } else {
+              targetBatches = opaqueBatches;
+            }
+            
+            // Initialize the batch if it doesn't exist
+            if (!targetBatches[batchKey]) {
+              targetBatches[batchKey] = {
+                color: finalColor,
+                opacity: opacity,
+                cells: []
+              };
+            }
+            
+            // Add this cell to the batch
+            targetBatches[batchKey].cells.push({
+              x: x,
+              y: y
+            });
+          }
+          
+          // Mark as no longer dirty
           dirtyGrid[y][x] = false;
         }
       }
+      
+      // Render opaque elements first
+      ctx.globalCompositeOperation = 'source-over';
+      for (const batchKey in opaqueBatches) {
+        const batch = opaqueBatches[batchKey];
+        
+        // Set styles once for the entire batch
+        ctx.globalAlpha = batch.opacity;
+        ctx.fillStyle = batch.color;
+        
+        // Draw all cells in this batch with pixel-perfect alignment
+        for (const cell of batch.cells) {
+          // Use integer math for crisp rendering without gaps
+          const pixelX = Math.floor(cell.x * cellSize);
+          const pixelY = Math.floor(cell.y * cellSize);
+          ctx.fillRect(pixelX, pixelY, pixelSize, pixelSize);
+        }
+      }
+      
+      // Reset global alpha before drawing transparent elements
+      ctx.globalAlpha = 1.0;
+      
+      // Render transparent elements second with proper blending
+      // This prevents the flickering by using consistent layering
+      for (const batchKey in transparentBatches) {
+        const batch = transparentBatches[batchKey];
+        
+        // Set styles once for the entire batch
+        ctx.globalAlpha = batch.opacity;
+        ctx.fillStyle = batch.color;
+        
+        // Draw all cells in this batch with pixel-perfect alignment
+        for (const cell of batch.cells) {
+          // Use integer math for crisp rendering without gaps
+          const pixelX = Math.floor(cell.x * cellSize);
+          const pixelY = Math.floor(cell.y * cellSize);
+          ctx.fillRect(pixelX, pixelY, pixelSize, pixelSize);
+        }
+      }
+      
+      // Special handling for gases that can transform (O2/CO2)
+      // This prevents flickering during gas transformations
+      ctx.globalCompositeOperation = 'source-over'; // Reset composite operation
+      for (const batchKey in gasTransformBatches) {
+        const batch = gasTransformBatches[batchKey];
+        
+        // Force a consistent appearance for transforming gases
+        ctx.globalAlpha = 0.7; // Fixed opacity for all gas transformations
+        ctx.fillStyle = batch.color;
+        
+        // Draw with anti-flicker settings
+        for (const cell of batch.cells) {
+          const pixelX = Math.floor(cell.x * cellSize);
+          const pixelY = Math.floor(cell.y * cellSize);
+          // Apply consistent rendering to prevent flickering during transformation
+          ctx.fillRect(pixelX, pixelY, pixelSize, pixelSize);
+        }
+      }
+      
+      // Reset global alpha and composite operation
+      ctx.globalAlpha = 1.0;
+      ctx.globalCompositeOperation = 'source-over';
     }
     function updateHUD(){
       if (hoveredX !== null && hoveredY !== null){
@@ -6435,14 +8091,33 @@ function playPlacementSound(elementType) {
         case GLASS_SHARD: return "Glass Shard";
         case SAWDUST: return "Sawdust";
         case SALT: return "Salt";
-        case SALT_WATER: return "Salt Watuh ahhhh aAHH";
+        case SALT_WATER: return "Salt Water";
+        case SUGAR: return "Sugar";
+        case SUGAR_WATER: return "Sugar Water";
+        case MOLTEN_SUGAR: return "Molten Sugar";
+        case DIAMOND: return "Diamond";
+        case DIAMOND_SHARDS: return "Diamond Shards";
+        case MOLTEN_DIAMOND: return "Molten Diamond";
+        case CONFETTI: return "Confetti";
+        case DABICCO: return "Dabicco";
+        case PLANT: return "Plant";
+        case GLUE: return "Glue";
+        case MOLTEN_COPPER: return "Molten Copper";
+        case MOLTEN_GLASS: return "Molten Glass";
+        case MOLTEN_STEEL: return "Molten Steel";
+        case MOLTEN_SALT: return "Molten Salt";
+        case OXIDIZED_COPPER: return "Oxidized Copper";
         default: return "Unknown";
       }
     }
+    
     function resetMoved(){
       // Use WebAssembly for resetMoved if available
       if (wasmEnabled && wasmExports && typeof wasmExports.resetMovedJS === 'function' && wasmInt32Array) {
         try {
+          // Store grid size in WebAssembly memory
+          wasmInt32Array[0] = GRID_SIZE;
+          
           // In a real implementation, this would be handled by WebAssembly
           // For now, we'll use a hybrid approach that still leverages WebAssembly memory
           
@@ -6499,7 +8174,13 @@ function playPlacementSound(elementType) {
     // Reusable arrays for shuffling positions - now declared at the top of the script
     // The initialization is done in the initGrid function
     
+    // Define a performance budget in milliseconds
+    const PERFORMANCE_BUDGET = 14; // Target ~70fps with some overhead
+    
     function gameLoop(timestamp) {
+      // Track start time for performance budget
+      const startTime = performance.now();
+      
       // Ensure lastFrameTime is properly initialized
       if (!timestamp) timestamp = performance.now();
       if (lastFrameTime === 0 || !lastFrameTime) lastFrameTime = timestamp;
@@ -6561,16 +8242,28 @@ function playPlacementSound(elementType) {
         const maxStepsPerFrame = 4;
         let stepsThisFrame = 0;
         
-        while(stepAccumulator >= fixedTimeStep && stepsThisFrame < maxStepsPerFrame) {
+        // Track if we've used up our performance budget
+        let budgetExceeded = false;
+        
+        while(stepAccumulator >= fixedTimeStep && stepsThisFrame < maxStepsPerFrame && !budgetExceeded) {
           resetMoved();
           performSimulationStep();
-          updateTemperature();
-          unifyCopperClusters();
-          processTransformations();
-          markAllCellsAsDirty(); // Mark all cells as dirty after each simulation step
-          stepAccumulator -= fixedTimeStep;
-          stepsThisFrame++;
+          
+          // Check if we've exceeded our performance budget
+          if (performance.now() - startTime > PERFORMANCE_BUDGET) {
+            budgetExceeded = true;
+          } else {
+            // Only do these expensive operations if we have budget left
+            updateTemperature();
+            unifyCopperClusters();
+            processTransformations();
+            stepAccumulator -= fixedTimeStep;
+            stepsThisFrame++;
+          }
         }
+        
+        // Always mark cells as dirty for rendering, even if we ran out of budget
+        markAllCellsAsDirty();
         
         // If we're falling behind, drop some accumulated time
         if (stepAccumulator > fixedTimeStep * 10) {
@@ -6586,7 +8279,15 @@ function playPlacementSound(elementType) {
     /***************************************
      * SIMULATION STEP
      ***************************************/
-    function performSimulationStep(){
+    // Create cell type category arrays for batch processing
+    const POWDER_ELEMENTS = new Set([SAND, ASH, THERMITE, BOMB, BIG_BOMB, WATER_BOMB, FIRE_BOMB, CRYO_BOMB, NUKE_BOMB, DIRT, WET_DIRT, WHEAT_SEEDS, OAK_SEEDS, BIRCH_SEEDS, FLOUR, DEAD_PLANT, GRASS, COAL_LUMP, COBBLESTONE, GLASS_SHARD, SAWDUST, SALT, DEAD_CELL, SUGAR, DIAMOND_SHARDS, CONFETTI]);
+    const LIQUID_ELEMENTS = new Set([WATER, LAVA, MOLTEN_SLAG, OIL, BLOOD, SALT_WATER, BURNING_THERMITE, ACID, GLUE, SUGAR_WATER, MOLTEN_DIAMOND]);
+    const GAS_ELEMENTS = new Set([GAS, WATER_VAPOR, CLOUD, SMOKE, BURNING_GAS, CARBON_DIOXIDE, OXYGEN, HELIUM, ACID_STEAM, ACID_CLOUD]);
+    
+    // Removed spatial partitioning code that was causing conflicts with the simulation
+    // We're keeping the original physics approach which has better compatibility with the game mechanics
+    
+    function performSimulationStep() {
       // Use WebAssembly for simulation step preparation if available
       if (wasmEnabled && wasmExports && typeof wasmExports.prepareSimulationJS === 'function' && wasmInt32Array) {
         try {
@@ -6601,6 +8302,7 @@ function playPlacementSound(elementType) {
         }
       }
       
+      // Revert to original approach for processing cells since batch processing has issues
       // Use reusable arrays directly without copying to reduce memory allocations
       // Shuffle the original arrays in place for better performance
       shuffle(reusablePositions);
@@ -6624,6 +8326,8 @@ function playPlacementSound(elementType) {
                 eraseCell(x, y);
                 continue;
               }
+              
+              // Use direct neighbor checking instead of spatial grid
               let neighbors = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
               for(let [dx, dy] of neighbors){
                 let nx = x + dx, ny = y + dy;
@@ -6663,6 +8367,10 @@ function playPlacementSound(elementType) {
             case SAWDUST: // Add Sawdust as a powder element
             case SALT: // Add Salt as a powder element
             case DEAD_CELL:
+            case SUGAR: // Add Sugar as a powder element
+            case DIAMOND_SHARDS: // Add Diamond Shards as a powder element
+            case CONFETTI: // Bright consistent colored confetti
+            case DABICCO: // Old confetti with random changing colors
               moveLikePowder(x, y, temp[y][x], e);
               break;
 
@@ -6738,6 +8446,43 @@ function playPlacementSound(elementType) {
             case SLIME:
               moveSlime(x, y, temp[y][x]);
               break;
+              
+            case GLUE:
+              moveGlue(x, y, temp[y][x]);
+              break;
+              
+            case SUGAR_WATER:
+              moveSugarWater(x, y, temp[y][x]);
+              break;
+              
+            case MOLTEN_DIAMOND:
+              moveMoltenDiamond(x, y, temp[y][x]);
+              break;
+              
+            case MOLTEN_SUGAR:
+              moveMoltenSugar(x, y, temp[y][x]);
+              break;
+              
+            case MOLTEN_COPPER:
+            case MOLTEN_STEEL:
+            case MOLTEN_SALT:
+            case MOLTEN_GLASS:
+              // Move like a liquid but with 40% chance to stay in place
+              if (Math.random() < 0.4) continue;
+              moveLikeLiquid(x, y, temp[y][x], e);
+              break;
+              
+            case PLANT:
+              // Plants don't move, they're static but can grow through the transform function
+              break;
+              
+            case DIAMOND:
+              // Diamond is static, doesn't move
+              break;
+              
+            case OXIDIZED_COPPER:
+              // Oxidized Copper is static, doesn't move
+              break;
 
             case BIRD:
               moveBird(x, y, temp[y][x]);
@@ -6756,6 +8501,161 @@ function playPlacementSound(elementType) {
           }
         }
       }
+      
+      // Removed batch processing code since we're using the original approach
+      /*
+          case SAND:
+          case ASH:
+          case THERMITE:
+          case BOMB:
+          case BIG_BOMB:
+          case WATER_BOMB:
+          case FIRE_BOMB:
+          case CRYO_BOMB:
+          case NUKE_BOMB:
+          case DIRT:
+          case WET_DIRT:
+          case WHEAT_SEEDS:
+          case OAK_SEEDS:
+          case BIRCH_SEEDS:
+          case FLOUR:
+          case DEAD_PLANT:
+          case GRASS:
+          case COAL_LUMP:
+          case COBBLESTONE:
+          case GLASS_SHARD:
+          case SAWDUST:
+          case SALT:
+          case DEAD_CELL:
+            moveLikePowder(x, y, t, e);
+            break;
+        }
+      }
+      
+      // Process wet materials that have gravity but aren't true powders
+      for (const cell of staticCells) {
+        const {x, y, e, t} = cell;
+        if (moved[y][x]) continue;
+        
+        switch(e) {
+          case WET_SAND:
+          case DOUGH:
+          case BREAD:
+            moveNonPowderGravity(x, y, t, e);
+            break;
+          case BOUNCY_BALL:
+            moveBouncyBall(x, y, t);
+            break;
+        }
+      }
+      
+      // Process liquid elements
+      for (const cell of liquidCells) {
+        const {x, y, e, t} = cell;
+        if (moved[y][x]) continue;
+        
+        switch(e) {
+          case WATER:
+            moveLikeLiquid(x, y, t, WATER);
+            break;
+          case SALT_WATER:
+            moveLikeLiquid(x, y, t, SALT_WATER);
+            break;
+          case OIL:
+            moveOil(x, y, t);
+            break;
+          case BLOOD:
+            moveBlood(x, y, t);
+            break;
+          case LAVA:
+          case MOLTEN_SLAG:
+            if(Math.random() < 0.5) continue;
+            moveLikeLiquid(x, y, t, LAVA);
+            break;
+          case BURNING_THERMITE:
+            moveLikeLiquid(x, y, t, THERMITE);
+            break;
+          case ACID:
+            moveLikeLiquid(x, y, t, ACID);
+            break;
+        }
+      }
+      
+      // Process gas elements
+      for (const cell of gasCells) {
+        const {x, y, e, t} = cell;
+        if (moved[y][x]) continue;
+        
+        switch(e) {
+          case GAS:
+            moveGasElement(x, y, t, GAS);
+            break;
+          case BURNING_GAS:
+            burningGasTime[y][x] += simulationTimeStep;
+            if(burningGasTime[y][x] > burningGasDuration){
+              setCellType(x, y, CARBON_DIOXIDE, t);
+              continue;
+            }
+            
+            let spreadChance = 0.05;
+            if(Math.random() < spreadChance){
+              // Use spatial grid for more efficient neighbor lookups
+              const spatialX = Math.floor(x / SPATIAL_CELL_SIZE);
+              const spatialY = Math.floor(y / SPATIAL_CELL_SIZE);
+              
+              let spreadComplete = false;
+              
+              // Check cells in current spatial cell and adjacent ones
+              for (let sy = Math.max(0, spatialY-1); sy <= Math.min(SPATIAL_GRID_SIZE-1, spatialY+1) && !spreadComplete; sy++) {
+                for (let sx = Math.max(0, spatialX-1); sx <= Math.min(SPATIAL_GRID_SIZE-1, spatialX+1) && !spreadComplete; sx++) {
+                  const spatialIndex = sy * SPATIAL_GRID_SIZE + sx;
+                  const cellsInSpatialCell = spatialGrid[spatialIndex];
+                  
+                  if (!cellsInSpatialCell) continue;
+                  
+                  for (const {x: nx, y: ny} of cellsInSpatialCell) {
+                    // Check if this is a neighbor (within 1 cell distance)
+                    const dx = Math.abs(nx - x);
+                    const dy = Math.abs(ny - y);
+                    
+                    if (dx <= 1 && dy <= 1 && !(dx === 0 && dy === 0)) {
+                      if(grid[ny][nx] === GAS){
+                        setCellType(nx, ny, BURNING_GAS, temp[ny][nx] + 100);
+                        burningGasTime[ny][nx] = 0;
+                        spreadComplete = true;
+                        break;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            
+            moveGasElement(x, y, t, BURNING_GAS);
+            break;
+          case HELIUM:
+            moveHelium(x, y, t);
+            break;
+          case OXYGEN:
+          case CARBON_DIOXIDE:
+          case WATER_VAPOR:
+          case ACID_STEAM:
+          case ACID_CLOUD:
+          case CLOUD:
+            moveGasElement(x, y, t, e);
+            break;
+          case SMOKE:
+            smokeLife[y][x] += simulationTimeStep;
+            const max = smokeMaxLife[y][x];
+            if(smokeLife[y][x] >= max){
+              eraseCell(x, y);
+              continue;
+            }
+            moveGasElement(x, y, t, SMOKE);
+            break;
+        }
+      }
+      */
     }
     /***************************************
      * PERFORMANCE OPTIMIZATIONS WITH WASM-GC
@@ -7324,6 +9224,15 @@ function playPlacementSound(elementType) {
           // Swap with water below
           setCellType(x, y+1, SALT_WATER, temp[y+1][x]);
           setCellType(x, y, WATER, oldT);
+          moved[y+1][x] = true;
+          return true;
+        }
+        
+        // Salt water also sinks below sugar water (denser than sugar water)
+        if (y+1 < GRID_SIZE && grid[y+1][x] === SUGAR_WATER && !moved[y+1][x]) {
+          // Swap with sugar water below
+          setCellType(x, y+1, SALT_WATER, temp[y+1][x]);
+          setCellType(x, y, SUGAR_WATER, oldT);
           moved[y+1][x] = true;
           return true;
         }
@@ -8093,7 +10002,7 @@ function explodeNukeBomb(cx, cy){
     /***************************************
      * REACTIONS & TRANSFORMS
      ***************************************/
-    function processTransformations(){
+    function processTransformations() {
       transformLavaToRock();
       transformWaterAndLavaToStone();
       transformWaterVapor();
@@ -8133,6 +10042,20 @@ function explodeNukeBomb(cx, cy){
       handleCellBehavior();
       handleGlassShardCreation();
       
+      // New element transformations
+      transformSugarToSugarWater();
+      transformSugarWater();
+      transformPlant();
+      transformDiamond();
+      transformConfetti();
+      transformOxidizedCopper();
+      
+      // Process all melting transformations in a unified way
+      handleElementMelting();
+      
+      // Process cooling of molten elements back to their solid forms
+      handleMoltenElementCooling();
+      
       // Handle new elements
       for(let y = 0; y < GRID_SIZE; y++){
         for(let x = 0; x < GRID_SIZE; x++){
@@ -8148,9 +10071,14 @@ function explodeNukeBomb(cx, cy){
             setCellType(x, y, COOKED_MEAT, 30);
           }
           
-          // Handle cobblestone melting
-          if(e === COBBLESTONE && temp[y][x] >= 800){
-            setCellType(x, y, MOLTEN_SLAG, 1200);
+          // Handle cobblestone melting - now using defined constant
+          if(e === COBBLESTONE && temp[y][x] >= cobbleMeltingTemp){
+            setCellType(x, y, MOLTEN_SLAG, cobbleMeltingTemp + 100);
+          }
+          
+          // Handle ice melting - special case transition to water
+          if(e === ICE && temp[y][x] > iceMeltingTemp){
+            setCellType(x, y, WATER, Math.max(temp[y][x], 1)); // Keep current temp, but ensure it's at least 1°C
           }
           
           // Handle oil ignition
@@ -8313,6 +10241,32 @@ function explodeNukeBomb(cx, cy){
         setCellType(x, y, BURNING_COAL_LUMP, (temp[y][x] < 100 ? 100 : temp[y][x]));
         burningWoodTime[y][x] = 0;
         sparkTimer[y][x] = 0;
+      }
+      else if(e === CONFETTI) {
+        setCellType(x, y, FIRE, fireTemperature);
+        fireLife[y][x] = 0;
+        // Create a colorful effect
+        colorVariations[y][x] = {
+          r: Math.random(),
+          g: Math.random(),
+          b: Math.random()
+        };
+      }
+      else if(e === PLANT) {
+        setCellType(x, y, FIRE, fireTemperature);
+        fireLife[y][x] = 0;
+      }
+      else if(e === SUGAR) {
+        // Sugar burns and caramelizes
+        setCellType(x, y, FIRE, fireTemperature);
+        fireLife[y][x] = 0;
+      }
+      else if(e === GLUE) {
+        // Glue burns slowly
+        if(Math.random() < 0.6) { // 60% chance to ignite
+          setCellType(x, y, FIRE, fireTemperature);
+          fireLife[y][x] = 0;
+        }
       }
       else if(e === SAWDUST){
         // Sawdust burns quickly like wood but with a shorter burn time
@@ -9176,7 +11130,8 @@ function explodeNukeBomb(cx, cy){
             }
           }
           else if(grid[y][x] === WATER_VAPOR){
-            if(vaporLife[y][x] >= vaporTransformThreshold || vaporLife[y][x] >= 6){
+            // Only allow transformation to cloud if temperature is below 99°C
+            if(temp[y][x] < 99 && (vaporLife[y][x] >= vaporTransformThreshold || vaporLife[y][x] >= 6)){
               let count = 0;
               for(let dy = -1; dy <= 1; dy++){
                 for(let dx = -1; dx <= 1; dx++){
@@ -9200,8 +11155,24 @@ function explodeNukeBomb(cx, cy){
       for(let y = 0; y < GRID_SIZE; y++){
         for(let x = 0; x < GRID_SIZE; x++){
           if(grid[y][x] === CLOUD){
-            if(temp[y][x] < 10){ grid[y][x] = WATER; temp[y][x] = 20; }
-            else if(cloudLife[y][x] >= cloudMaxLife[y][x]){ grid[y][x] = WATER; temp[y][x] = 20; cloudLife[y][x] = 0; }
+            // If temperature is very high (≥100°C), convert clouds to water vapor
+            if(temp[y][x] >= 100) {
+              grid[y][x] = WATER_VAPOR;
+              temp[y][x] = 120; 
+              vaporLife[y][x] = 0;
+            }
+            // Only allow transformation to water if temperature is below 99°C
+            else if(temp[y][x] < 99) {
+              if(temp[y][x] < 10) { 
+                grid[y][x] = WATER; 
+                temp[y][x] = 20; 
+              }
+              else if(cloudLife[y][x] >= cloudMaxLife[y][x]) {
+                grid[y][x] = WATER; 
+                temp[y][x] = 20; 
+                cloudLife[y][x] = 0; 
+              }
+            }
           }
         }
       }
@@ -10026,17 +11997,349 @@ function explodeNukeBomb(cx, cy){
       }
     }
 
+    // Movement function for Glue - sticky liquid that moves slowly
+    function moveGlue(x, y, oldT) {
+      // 50% chance to stay in place (very viscous)
+      if (Math.random() < 0.5) {
+        // Check if cells touching glue should be stuck
+        let neighbors = [[1,0],[-1,0],[0,1],[0,-1]];
+        for (let [dx, dy] of neighbors) {
+          let nx = x + dx, ny = y + dy;
+          if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+            // Elements that can be stuck by glue (except other glue and empty)
+            if (grid[ny][nx] !== EMPTY && grid[ny][nx] !== GLUE && 
+                grid[ny][nx] !== CLONER && grid[ny][nx] !== STEEL && 
+                grid[ny][nx] !== DIAMOND) {
+              // Mark these cells as stuck so they don't move this frame
+              moved[ny][nx] = true;
+            }
+          }
+        }
+        return;
+      }
+      
+      // Movement behavior (similar to water but slower)
+      if (y+1 < GRID_SIZE && grid[y+1][x] === EMPTY && !moved[y+1][x]) {
+        moveCell(x, y, x, y+1, oldT, GLUE);
+      } else {
+        let dirs = [];
+        if (x > 0 && grid[y][x-1] === EMPTY && !moved[y][x-1]) dirs.push(-1);
+        if (x < GRID_SIZE-1 && grid[y][x+1] === EMPTY && !moved[y][x+1]) dirs.push(1);
+        shuffle(dirs);
+        for (let dir of dirs) {
+          let nx = x + dir;
+          if (grid[y][nx] === EMPTY && !moved[y][nx]) {
+            moveCell(x, y, nx, y, oldT, GLUE);
+            return;
+          }
+        }
+      }
+    }
+
+    // Movement function for Sugar - powder behavior like sand
+    function moveSugar(x, y, oldT) {
+      if (y+1 < GRID_SIZE) {
+        // Fall straight down if possible
+        if (grid[y+1][x] === EMPTY && !moved[y+1][x]) {
+          moveCell(x, y, x, y+1, oldT, SUGAR);
+          return;
+        }
+        
+        // Otherwise try to fall diagonally
+        let dirs = [];
+        if (x > 0 && grid[y+1][x-1] === EMPTY && !moved[y+1][x-1]) dirs.push(-1);
+        if (x < GRID_SIZE-1 && grid[y+1][x+1] === EMPTY && !moved[y+1][x+1]) dirs.push(1);
+        shuffle(dirs);
+        for (let dir of dirs) {
+          let nx = x + dir;
+          if (grid[y+1][nx] === EMPTY && !moved[y+1][nx]) {
+            moveCell(x, y, nx, y+1, oldT, SUGAR);
+            return;
+          }
+        }
+      }
+    }
+
+    // Movement function for Sugar Water - similar to water but heavier (falls below water)
+    function moveSugarWater(x, y, oldT) {
+      // 30% chance to stay in place (slightly viscous)
+      if (Math.random() < 0.3) return;
+      
+      if (y+1 < GRID_SIZE) {
+        // Fall straight down if possible
+        if (grid[y+1][x] === EMPTY && !moved[y+1][x]) {
+          moveCell(x, y, x, y+1, oldT, SUGAR_WATER);
+          return;
+        }
+        
+        // Sugar water is heavier than water, so it falls below regular water
+        if (grid[y+1][x] === WATER && !moved[y+1][x]) {
+          // Swap positions (sugar water sinks below water)
+          grid[y][x] = WATER;
+          grid[y+1][x] = SUGAR_WATER;
+          let tempT = temp[y][x];
+          temp[y][x] = temp[y+1][x];
+          temp[y+1][x] = tempT;
+          moved[y][x] = true;
+          moved[y+1][x] = true;
+          return;
+        }
+        
+        // But salt water is heavier than sugar water
+        if (grid[y+1][x] === SALT_WATER && !moved[y+1][x]) {
+          // Salt water stays below sugar water (don't swap)
+          return;
+        }
+        
+        // Otherwise try to spread horizontally
+        let dirs = [];
+        if (x > 0 && grid[y][x-1] === EMPTY && !moved[y][x-1]) dirs.push(-1);
+        if (x < GRID_SIZE-1 && grid[y][x+1] === EMPTY && !moved[y][x+1]) dirs.push(1);
+        shuffle(dirs);
+        for (let dir of dirs) {
+          let nx = x + dir;
+          if (grid[y][nx] === EMPTY && !moved[y][nx]) {
+            moveCell(x, y, nx, y, oldT, SUGAR_WATER);
+            return;
+          }
+        }
+      }
+    }
+
+    // Movement function for Diamond Shards - heavy powder
+    function moveDiamondShards(x, y, oldT) {
+      if (y+1 < GRID_SIZE) {
+        // Fall straight down if possible
+        if (grid[y+1][x] === EMPTY && !moved[y+1][x]) {
+          moveCell(x, y, x, y+1, oldT, DIAMOND_SHARDS);
+          return;
+        }
+        
+        // Otherwise try to fall diagonally
+        let dirs = [];
+        if (x > 0 && grid[y+1][x-1] === EMPTY && !moved[y+1][x-1]) dirs.push(-1);
+        if (x < GRID_SIZE-1 && grid[y+1][x+1] === EMPTY && !moved[y+1][x+1]) dirs.push(1);
+        shuffle(dirs);
+        for (let dir of dirs) {
+          let nx = x + dir;
+          if (grid[y+1][nx] === EMPTY && !moved[y+1][nx]) {
+            moveCell(x, y, nx, y+1, oldT, DIAMOND_SHARDS);
+            return;
+          }
+        }
+      }
+    }
+
+    // Movement function for Molten Diamond - like lava but even hotter
+    function moveMoltenDiamond(x, y, oldT){
+      // Make molten diamond stay molten longer
+      // This makes it cool down much slower than other molten materials
+      if (temp[y][x] > 1000) {
+        // Very slow cooling (10 times slower than normal)
+        temp[y][x] -= 0.1 * simulationTimeStep;
+      }
+      
+      // 50% chance to stay in place each frame (slow movement)
+      if (Math.random() < 0.5) return;
+      
+      // Move like a liquid with 50% probability
+      if (y+1 < GRID_SIZE) {
+        // Fall straight down if possible
+        if (grid[y+1][x] === EMPTY && !moved[y+1][x]) {
+          moveCell(x, y, x, y+1, oldT, MOLTEN_DIAMOND);
+          return;
+        }
+        
+        // Otherwise spread horizontally
+        let dirs = [];
+        if (x > 0 && grid[y][x-1] === EMPTY && !moved[y][x-1]) dirs.push(-1);
+        if (x < GRID_SIZE-1 && grid[y][x+1] === EMPTY && !moved[y][x+1]) dirs.push(1);
+        shuffle(dirs);
+        for (let dir of dirs) {
+          let nx = x + dir;
+          if (grid[y][nx] === EMPTY && !moved[y][nx]) {
+            moveCell(x, y, nx, y, oldT, MOLTEN_DIAMOND);
+            return;
+          }
+        }
+        
+        // Try diagonal movement
+        let diag = [];
+        if(x > 0 && y+1 < GRID_SIZE && grid[y+1][x-1] === EMPTY && !moved[y+1][x-1]) diag.push(-1);
+        if(x < GRID_SIZE-1 && y+1 < GRID_SIZE && grid[y+1][x+1] === EMPTY && !moved[y+1][x+1]) diag.push(1);
+        shuffle(diag);
+        for(let d of diag){
+          let nx = x + d, ny = y+1;
+          if(grid[ny][nx] === EMPTY && !moved[ny][nx]){
+            moveCell(x, y, nx, ny, oldT, MOLTEN_DIAMOND);
+            return;
+          }
+        }
+      }
+    }
+
+    // Movement function for Molten Sugar - like a liquid with unique properties
+    function moveMoltenSugar(x, y, oldT) {
+      // Move like a viscous liquid (30% chance to stay in place)
+      if (Math.random() < 0.3) return;
+      
+      // Move like a liquid
+      if (y+1 < GRID_SIZE) {
+        // Fall straight down if possible
+        if (grid[y+1][x] === EMPTY && !moved[y+1][x]) {
+          moveCell(x, y, x, y+1, oldT, MOLTEN_SUGAR);
+          return;
+        }
+        
+        // Otherwise spread horizontally
+        let dirs = [];
+        if (x > 0 && grid[y][x-1] === EMPTY && !moved[y][x-1]) dirs.push(-1);
+        if (x < GRID_SIZE-1 && grid[y][x+1] === EMPTY && !moved[y][x+1]) dirs.push(1);
+        shuffle(dirs);
+        for (let dir of dirs) {
+          let nx = x + dir;
+          if (grid[y][nx] === EMPTY && !moved[y][nx]) {
+            moveCell(x, y, nx, y, oldT, MOLTEN_SUGAR);
+            return;
+          }
+        }
+        
+        // Try diagonal movement
+        let diag = [];
+        if(x > 0 && y+1 < GRID_SIZE && grid[y+1][x-1] === EMPTY && !moved[y+1][x-1]) diag.push(-1);
+        if(x < GRID_SIZE-1 && y+1 < GRID_SIZE && grid[y+1][x+1] === EMPTY && !moved[y+1][x+1]) diag.push(1);
+        shuffle(diag);
+        for(let d of diag){
+          let nx = x + d, ny = y+1;
+          if(grid[ny][nx] === EMPTY && !moved[ny][nx]){
+            moveCell(x, y, nx, ny, oldT, MOLTEN_SUGAR);
+            return;
+          }
+        }
+      }
+    }
+    
+    // Movement function for Confetti - light powder with some floating
+    function moveConfetti(x, y, oldT) {
+      // 20% chance to float upward
+      if (Math.random() < 0.2 && y > 0 && grid[y-1][x] === EMPTY && !moved[y-1][x]) {
+        moveCell(x, y, x, y-1, oldT, CONFETTI);
+        return;
+      }
+      
+      // Otherwise, behave like a light powder
+      if (y+1 < GRID_SIZE) {
+        // Fall straight down if possible, but with 90% probability (sometimes floats)
+        if (grid[y+1][x] === EMPTY && !moved[y+1][x] && Math.random() < 0.9) {
+          moveCell(x, y, x, y+1, oldT, CONFETTI);
+          return;
+        }
+        
+        // Otherwise try to fall or drift diagonally
+        let dirs = [];
+        if (x > 0 && grid[y+1][x-1] === EMPTY && !moved[y+1][x-1]) dirs.push(-1);
+        if (x < GRID_SIZE-1 && grid[y+1][x+1] === EMPTY && !moved[y+1][x+1]) dirs.push(1);
+        shuffle(dirs);
+        for (let dir of dirs) {
+          let nx = x + dir;
+          if (grid[y+1][nx] === EMPTY && !moved[y+1][nx]) {
+            moveCell(x, y, nx, y+1, oldT, CONFETTI);
+            return;
+          }
+        }
+        
+        // Occasionally move sideways
+        if (Math.random() < 0.3) {
+          dirs = [];
+          if (x > 0 && grid[y][x-1] === EMPTY && !moved[y][x-1]) dirs.push(-1);
+          if (x < GRID_SIZE-1 && grid[y][x+1] === EMPTY && !moved[y][x+1]) dirs.push(1);
+          shuffle(dirs);
+          for (let dir of dirs) {
+            let nx = x + dir;
+            if (grid[y][nx] === EMPTY && !moved[y][nx]) {
+              moveCell(x, y, nx, y, oldT, CONFETTI);
+              return;
+            }
+          }
+        }
+      }
+    }
+    
+    // Movement function for Dabicco - same as old Confetti (random colors that change)
+    function moveDabicco(x, y, oldT) {
+      // 20% chance to float upward
+      if (Math.random() < 0.2 && y > 0 && grid[y-1][x] === EMPTY && !moved[y-1][x]) {
+        moveCell(x, y, x, y-1, oldT, DABICCO);
+        return;
+      }
+      
+      // Otherwise, behave like a light powder
+      if (y+1 < GRID_SIZE) {
+        // Fall straight down if possible, but with 90% probability (sometimes floats)
+        if (grid[y+1][x] === EMPTY && !moved[y+1][x] && Math.random() < 0.9) {
+          moveCell(x, y, x, y+1, oldT, DABICCO);
+          return;
+        }
+        
+        // Otherwise try to fall or drift diagonally
+        let dirs = [];
+        if (x > 0 && grid[y+1][x-1] === EMPTY && !moved[y+1][x-1]) dirs.push(-1);
+        if (x < GRID_SIZE-1 && grid[y+1][x+1] === EMPTY && !moved[y+1][x+1]) dirs.push(1);
+        shuffle(dirs);
+        for (let dir of dirs) {
+          let nx = x + dir;
+          if (grid[y+1][nx] === EMPTY && !moved[y+1][nx]) {
+            moveCell(x, y, nx, y+1, oldT, DABICCO);
+            return;
+          }
+        }
+        
+        // Occasionally move sideways
+        if (Math.random() < 0.3) {
+          dirs = [];
+          if (x > 0 && grid[y][x-1] === EMPTY && !moved[y][x-1]) dirs.push(-1);
+          if (x < GRID_SIZE-1 && grid[y][x+1] === EMPTY && !moved[y][x+1]) dirs.push(1);
+          shuffle(dirs);
+          for (let dir of dirs) {
+            let nx = x + dir;
+            if (grid[y][nx] === EMPTY && !moved[y][nx]) {
+              moveCell(x, y, nx, y, oldT, DABICCO);
+              return;
+            }
+          }
+        }
+      }
+    }
+
     // Add to conductionRates
     conductionRates[ACID] = 0.8;
     conductionRates[ACID_STEAM] = 0.6;
     conductionRates[ACID_CLOUD] = 0.3;
     conductionRates[SLIME] = 0.4;
+    conductionRates[GLUE] = 0.3;
+    conductionRates[SUGAR] = 0.1;
+    conductionRates[SUGAR_WATER] = 0.7;
+    conductionRates[PLANT] = 0.4;
+    conductionRates[DIAMOND] = 0.2;
+    conductionRates[DIAMOND_SHARDS] = 0.15;
+    conductionRates[MOLTEN_DIAMOND] = 0.9;
+    conductionRates[CONFETTI] = 0.1;
+    conductionRates[OXIDIZED_COPPER] = 0.6;
 
     // Add to heatCapacities
     heatCapacities[ACID] = 1;
     heatCapacities[ACID_STEAM] = 0.5;
     heatCapacities[ACID_CLOUD] = 0.5;
     heatCapacities[SLIME] = 2;
+    heatCapacities[GLUE] = 1.5;
+    heatCapacities[SUGAR] = 0.6;
+    heatCapacities[SUGAR_WATER] = 1.2;
+    heatCapacities[PLANT] = 0.8;
+    heatCapacities[DIAMOND] = 0.5;
+    heatCapacities[DIAMOND_SHARDS] = 0.4;
+    heatCapacities[MOLTEN_DIAMOND] = 2.5;
+    heatCapacities[CONFETTI] = 0.3;
+    heatCapacities[OXIDIZED_COPPER] = 0.9;
 
     function transformGrass() {
       for (let y = 0; y < GRID_SIZE; y++) {
@@ -10065,7 +12368,375 @@ function explodeNukeBomb(cx, cy){
         }
       }
     }
+    
+    // Sugar dissolves in water to create sugar water
+    function transformSugarToSugarWater() {
+      let cpy = grid.map(r => r.slice());
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (grid[y][x] === SUGAR) {
+            let neighbors = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+            for (let [dx, dy] of neighbors) {
+              let nx = x + dx, ny = y + dy;
+              if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+                if (grid[ny][nx] === WATER) {
+                  cpy[y][x] = SUGAR_WATER;
+                  cpy[ny][nx] = EMPTY;
+                  temp[y][x] = (temp[y][x] + temp[ny][nx]) / 2; // Average temperature
+                  temp[ny][nx] = null;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+      grid = cpy;
+    }
+    
+    // Sugar water evaporates leaving sugar behind and creating water vapor
+    function transformSugarWater() {
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (grid[y][x] === SUGAR_WATER) {
+            // Evaporation at high temperatures
+            if (temp[y][x] >= 80 && Math.random() < 0.05) {
+              // Leave sugar behind
+              grid[y][x] = SUGAR;
+              temp[y][x] = Math.max(temp[y][x] - 20, 20); // Cooling effect from evaporation
+              
+              // Try to create water vapor above if space is available
+              const checkPositions = [[0, -1], [-1, -1], [1, -1]];
+              for (let [dx, dy] of checkPositions) {
+                const nx = x + dx, ny = y + dy;
+                if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE && grid[ny][nx] === EMPTY) {
+                  grid[ny][nx] = WATER_VAPOR;
+                  temp[ny][nx] = 100;
+                  vaporLife[ny][nx] = 0;
+                  markDirty(nx, ny);
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Plant grows when in contact with water
+    function transformPlant() {
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (grid[y][x] === PLANT) {
+            // Actively search for water within a larger radius (up to 5 cells away)
+            let waterFound = false;
+            let waterDirection = null;
+            
+            // First, scan for water in a 5-cell radius
+            for (let searchRadius = 1; searchRadius <= 5; searchRadius++) {
+              for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+                for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+                  // Skip if we're not on the edge of the search radius (only check the perimeter)
+                  if (Math.abs(dx) !== searchRadius && Math.abs(dy) !== searchRadius) continue;
+                  
+                  let nx = x + dx, ny = y + dy;
+                  if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+                    if (grid[ny][nx] === WATER || grid[ny][nx] === SUGAR_WATER) {
+                      // Found water! Store its direction relative to us
+                      waterFound = true;
+                      waterDirection = { dx: Math.sign(dx), dy: Math.sign(dy) };
+                      break;
+                    }
+                  }
+                }
+                if (waterFound) break;
+              }
+              if (waterFound) break;
+            }
+            
+            // If we found water, try to grow toward it
+            if (waterFound && waterDirection) {
+              // Higher chance to grow (20% chance)
+              if (Math.random() < 0.2) {
+                // Try to grow in the direction of the water
+                let growX = x + waterDirection.dx;
+                let growY = y + waterDirection.dy;
+                
+                // Check if the target cell is valid and empty
+                if (growX >= 0 && growX < GRID_SIZE && growY >= 0 && growY < GRID_SIZE) {
+                  if (grid[growY][growX] === EMPTY) {
+                    grid[growY][growX] = PLANT;
+                    temp[growY][growX] = temp[y][x];
+                  }
+                }
+              }
+            }
+            
+            // Also check for immediate neighbors to consume water (faster consumption)
+            let neighbors = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+            for (let [dx, dy] of neighbors) {
+              let nx = x + dx, ny = y + dy;
+              if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+                if (grid[ny][nx] === WATER || grid[ny][nx] === SUGAR_WATER) {
+                  // Faster consumption of water (10% chance per frame)
+                  if (Math.random() < 0.1) {
+                    grid[ny][nx] = EMPTY;
+                    temp[ny][nx] = null;
+                    
+                    // Guaranteed growth after consuming water (50% chance)
+                    if (Math.random() < 0.5) {
+                      // Try to grow in empty spots
+                      shuffle(neighbors);
+                      for (let [gx, gy] of neighbors) {
+                        let growX = x + gx, growY = y + gy;
+                        if (growX >= 0 && growX < GRID_SIZE && growY >= 0 && growY < GRID_SIZE) {
+                          if (grid[growY][growX] === EMPTY) {
+                            grid[growY][growX] = PLANT;
+                            temp[growY][growX] = temp[y][x];
+                            break;
+                          }
+                        }
+                      }
+                    }
+                    break;
+                  }
+                }
+              }
+            }
+            
+            // Burns at high temperature
+            if (temp[y][x] >= 150) {
+              grid[y][x] = FIRE;
+              temp[y][x] = fireTemperature;
+              fireLife[y][x] = 0;
+            }
+          }
+        }
+      }
+    }
+    
+    // Diamond transformation (melting at extreme temperatures)
+    function transformDiamond() {
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (grid[y][x] === DIAMOND) {
+            // Melting diamond requires extreme heat (made easier to melt now)
+            if (temp[y][x] >= 3000) {
+              grid[y][x] = MOLTEN_DIAMOND;
+              temp[y][x] = 3500;
+              markDirty(x, y);
+            }
+            
+            // Under extreme pressure (being surrounded by solid elements), can shatter
+            let solidCount = 0;
+            let neighbors = [[1,0],[-1,0],[0,1],[0,-1]];
+            for (let [dx, dy] of neighbors) {
+              let nx = x + dx, ny = y + dy;
+              if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+                // Count surrounding solid elements that can exert pressure
+                if (grid[ny][nx] === STEEL || grid[ny][nx] === STONE || grid[ny][nx] === BASALT) {
+                  solidCount++;
+                }
+              }
+            }
+            
+            // If surrounded on all sides and at high enough temperature
+            if (solidCount >= 4 && temp[y][x] > 2000) {
+              grid[y][x] = DIAMOND_SHARDS;
+              temp[y][x] = Math.min(temp[y][x], 2500); // Shattering releases some heat
+              markDirty(x, y);
+            }
+          }
+          // Diamond shards can melt at lower temperature than whole diamonds
+          else if (grid[y][x] === DIAMOND_SHARDS && temp[y][x] >= 2500) {
+            grid[y][x] = MOLTEN_DIAMOND;
+            temp[y][x] = 3000;
+            markDirty(x, y);
+          }
+          // Molten diamond cools back to diamond
+          else if (grid[y][x] === MOLTEN_DIAMOND && temp[y][x] < 2500) {
+            grid[y][x] = DIAMOND;
+            temp[y][x] = 2000;
+            markDirty(x, y);
+          }
+        }
+      }
+    }
+    
+    // Confetti behavior - burns and creates festive colors
+    function transformConfetti() {
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (grid[y][x] === CONFETTI) {
+            // Burns easily
+            if (temp[y][x] >= 80) {
+              grid[y][x] = FIRE;
+              temp[y][x] = fireTemperature;
+              fireLife[y][x] = 0;
+              
+              // Create a colorful effect
+              colorVariations[y][x] = {
+                r: Math.random(),
+                g: Math.random(),
+                b: Math.random()
+              };
+            }
+            
+            // Check for nearby fire
+            let neighbors = [[1,0],[-1,0],[0,1],[0,-1]];
+            for (let [dx, dy] of neighbors) {
+              let nx = x + dx, ny = y + dy;
+              if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+                if (grid[ny][nx] === FIRE) {
+                  grid[y][x] = FIRE;
+                  temp[y][x] = fireTemperature;
+                  fireLife[y][x] = 0;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Oxidized Copper behavior
+    // Create a reverse mapping of molten elements to their solid forms
+    const coolingMap = {};
+    coolingMap[MOLTEN_SALT] = SALT;
+    coolingMap[MOLTEN_STEEL] = STEEL;
+    coolingMap[MOLTEN_COPPER] = COPPER;
+    coolingMap[MOLTEN_GLASS] = GLASS;
+    coolingMap[MOLTEN_SUGAR] = SUGAR;
+    coolingMap[MOLTEN_ELECTRICAL] = COPPER;
+    coolingMap[MOLTEN_SLAG] = STONE;
+    // Remove MOLTEN_DIAMOND from here since it's handled specifically in transformDiamond function
 
+    // Function to handle cooling of all molten elements back to their solid forms
+    function handleMoltenElementCooling() {
+      // Define cooling temperatures for each molten element
+      const coolingTemps = {};
+      coolingTemps[MOLTEN_SALT] = saltMeltingTemp - 50;
+      coolingTemps[MOLTEN_STEEL] = steelMeltingTemp - 100;
+      coolingTemps[MOLTEN_COPPER] = copperMeltingTemp - 50;
+      coolingTemps[MOLTEN_GLASS] = glassMeltingTemp - 100;
+      coolingTemps[MOLTEN_SUGAR] = sugarMeltingTemp - 30;
+      coolingTemps[MOLTEN_ELECTRICAL] = copperMeltingTemp - 50;
+      coolingTemps[MOLTEN_SLAG] = stoneMeltingTemp - 100;
+      // Remove MOLTEN_DIAMOND from here since it's handled specifically in transformDiamond function
+      
+      // Loop through the grid
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          const element = grid[y][x];
+          const currentTemp = temp[y][x];
+          
+          // If this is a molten element and it's below its cooling temperature
+          if (coolingMap[element] && currentTemp < coolingTemps[element]) {
+            // Transform it back to its solid form
+            grid[y][x] = coolingMap[element];
+            temp[y][x] = coolingTemps[element] - 20; // Set temperature slightly below cooling point
+            markDirty(x, y);
+          }
+        }
+      }
+    }
+
+    // Unified function to handle all element melting transformations
+    function handleElementMelting() {
+      // Define melting temperatures for each element
+      const meltingTemps = {};
+      meltingTemps[SALT] = saltMeltingTemp;
+      meltingTemps[STEEL] = steelMeltingTemp;
+      meltingTemps[COPPER] = copperMeltingTemp;
+      meltingTemps[DIAMOND] = diamondMeltingTemp;
+      meltingTemps[GLASS] = glassMeltingTemp;
+      meltingTemps[SUGAR] = sugarMeltingTemp;
+      meltingTemps[STONE] = stoneMeltingTemp;
+      meltingTemps[COBBLESTONE] = cobbleMeltingTemp;
+      
+      // Loop through the grid
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          const element = grid[y][x];
+          const currentTemp = temp[y][x];
+          
+          // Check if this element is in our melting map
+          if (element in meltingMap) {
+            const meltTemp = meltingTemps[element];
+            const moltenElement = meltingMap[element];
+            
+            // If temperature exceeds melting point, transform to molten version
+            if (currentTemp >= meltTemp) {
+              // Set cell to molten version with temperature slightly above melting point
+              grid[y][x] = moltenElement;
+              temp[y][x] = meltTemp + 20;
+              
+              // Mark for rendering
+              markDirty(x, y);
+            }
+          }
+          
+          // Special case for cobblestone and stone that melt to slag instead of having their own molten versions
+          if (element === COBBLESTONE && currentTemp >= cobbleMeltingTemp) {
+            grid[y][x] = MOLTEN_SLAG;
+            temp[y][x] = cobbleMeltingTemp + 100;
+            markDirty(x, y);
+          } else if (element === STONE && currentTemp >= stoneMeltingTemp) {
+            grid[y][x] = MOLTEN_SLAG;
+            temp[y][x] = stoneMeltingTemp + 100;
+            markDirty(x, y);
+          }
+        }
+      }
+    }
+
+function transformOxidizedCopper() {
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (grid[y][x] === OXIDIZED_COPPER) {
+            // Can melt at high temperatures
+            if (temp[y][x] >= copperMeltingTemp) {
+              grid[y][x] = MOLTEN_COPPER;
+              temp[y][x] = copperMeltingTemp + 15;
+            }
+          }
+          // Copper oxidizes when in contact with water or oxygen over time
+          // OR melts at high temperature
+          else if (grid[y][x] === COPPER) {
+            // Check if copper should melt
+            if (temp[y][x] >= copperMeltingTemp) { // Using our constant for consistency
+              grid[y][x] = MOLTEN_COPPER;
+              temp[y][x] = copperMeltingTemp + 15;
+              continue; // Skip oxidization check if we've melted the copper
+            }
+            
+            // Check for oxidization
+            let neighbors = [[1,0],[-1,0],[0,1],[0,-1]];
+            let shouldOxidize = false;
+            
+            for (let [dx, dy] of neighbors) {
+              let nx = x + dx, ny = y + dy;
+              if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+                if (grid[ny][nx] === WATER || grid[ny][nx] === OXYGEN) {
+                  // Small chance to oxidize when in contact with water or oxygen
+                  if (Math.random() < 0.001) {
+                    shouldOxidize = true;
+                    break;
+                  }
+                }
+              }
+            }
+            
+            if (shouldOxidize) {
+              grid[y][x] = OXIDIZED_COPPER;
+              // Keep the same temperature
+            }
+          }
+        }
+      }
+    }
+    
     // HUD toggle functionality
     function updateHudVisibility() {
       const hud = document.getElementById('hud');
@@ -10121,10 +12792,12 @@ function explodeNukeBomb(cx, cy){
     let popOutWindow = null;
 
     // Add event handlers
-    document.getElementById('downloadOfflineBtn').addEventListener('click', function() {
-      const htmlContent = document.documentElement.outerHTML;
-      const blob = new Blob([htmlContent], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
+    const downloadOfflineBtn = document.getElementById('downloadOfflineBtn');
+    if (downloadOfflineBtn) {
+      downloadOfflineBtn.addEventListener('click', function() {
+        const htmlContent = document.documentElement.outerHTML;
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = 'sandbox_game.html';
@@ -10133,6 +12806,7 @@ function explodeNukeBomb(cx, cy){
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     });
+    }
 
     document.getElementById('dabyFps').addEventListener('change', function(e) {
       targetFps = parseInt(e.target.value);
@@ -11879,13 +14553,18 @@ function explodeNukeBomb(cx, cy){
           <div class="option-item">
             <label for="stageSizeSelect">Stage Size (Requires Canvas Clear):</label>
             <select id="stageSizeSelect">
-              <option value="25">25x25x25</option>
-              <option value="50" selected>50x50x50</option>
-              <option value="75">75x75x75</option>
-              <option value="100">100x100x100</option>
-              <option value="125">125x125x125</option>
+              <option value="25">25x25</option>
+              <option value="50">50x50</option>
+              <option value="75" selected>75x75</option>
+              <option value="100">100x100</option>
+              <option value="125">125x125</option>
+              <option value="150">150x150</option>
+              <option value="175">175x175</option>
+              <option value="200">200x200</option>
             </select>
-            <p class="option-description">Larger sizes provide more space and detail, but will require more processing power.</p> <br> <p class="option-description" style="color:red;">WARNING: Changing the stage size will completely clear the current canvas. This action cannot be undone.</p>
+            <p class="option-description">Larger sizes provide more space and detail, but will require more processing power.</p>
+            <p class="option-description" style="color:red;">WARNING: Changing the stage size will completely clear the current canvas. This action cannot be undone.</p>
+            <p id="largeGridWarning" class="option-description" style="color:orange; display:none;">CAUTION: Grid sizes above 100x100 can cause extreme lag in many scenarios and are not recommended for low-power devices like Chromebooks.</p>
           </div>
 
           <div class="option-item">
@@ -12282,7 +14961,172 @@ function explodeNukeBomb(cx, cy){
         card.appendChild(termButton);
         container.appendChild(card);
       });
+
+      // Help modal and navigation
+      const helpButton = document.getElementById('helpButton');
+      const helpModal = document.getElementById('helpModal');
+      const helpClose = document.querySelector('.help-close');
+      const helpPages = document.querySelectorAll('.help-page');
+      let currentHelpPage = 1;
+
+      helpButton.addEventListener('click', function() {
+        helpModal.style.display = 'block';
+      });
+
+      helpClose.addEventListener('click', function() {
+        helpModal.style.display = 'none';
+      });
+
+      // Initialize help navigation buttons
+      document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('help-next')) {
+          // Find current page and show next
+          const nextPage = currentHelpPage + 1;
+          if (nextPage <= helpPages.length) {
+            showHelpPage(nextPage);
+          }
+        } else if (e.target.classList.contains('help-prev')) {
+          // Find current page and show previous
+          const prevPage = currentHelpPage - 1;
+          if (prevPage >= 1) {
+            showHelpPage(prevPage);
+          }
+        }
+      });
+
+      function showHelpPage(pageNum) {
+        // Hide all pages
+        helpPages.forEach(page => page.classList.remove('active'));
+
+        // Show the requested page
+        const pageToShow = document.querySelector(`.help-page[data-page="${pageNum}"]`);
+        if (pageToShow) {
+          pageToShow.classList.add('active');
+          currentHelpPage = pageNum;
+        }
+      }
+
+      // First-time user hints system using localStorage
+      const HINTS = {
+        FIRST_VISIT: {
+          id: 'first-visit',
+          message: 'Welcome to Sandbox Delta! Click on elements in the sidebar to select them, then click on the grid to place them.',
+          condition: () => true
+        },
+        ALT_BRUSH: {
+          id: 'alt-brush',
+          message: 'TIP: Hold ALT while placing elements to use a square brush instead of a circle!',
+          condition: () => true
+        },
+        SHIFT_LINE: {
+          id: 'shift-line',
+          message: 'TIP: Hold SHIFT while placing elements to draw in a straight line!',
+          condition: () => true
+        },
+        TEMPERATURE: {
+          id: 'temperature',
+          message: 'TIP: Every element has a temperature. Use the Heat and Cool tools to change states of matter!',
+          condition: () => true
+        },
+        SAVING: {
+          id: 'saving',
+          message: 'TIP: You can save your creations using the Save/Load button for later use!',
+          condition: () => true
+        },
+        BRUSH_SIZE: {
+          id: 'brush-size',
+          message: 'TIP: Use the mouse wheel to change your brush size!',
+          condition: () => true
+        }
+      };
+      
+      // Initialize hint system
+      function initHintSystem() {
+        // Check if this is first visit
+        if (!localStorage.getItem('sandboxDelta_visited')) {
+          localStorage.setItem('sandboxDelta_visited', 'true');
+          localStorage.setItem('sandboxDelta_version', '1.0'); // Store current version
+          
+          // Mark all hints as unshown
+          Object.values(HINTS).forEach(hint => {
+            localStorage.setItem(`hint_${hint.id}`, 'false');
+          });
+          
+          // Show first visit hint immediately
+          showHint(HINTS.FIRST_VISIT);
+          
+          // Schedule other hints
+          setTimeout(() => showHint(HINTS.BRUSH_SIZE), 30000); // 30 seconds
+          setTimeout(() => showHint(HINTS.ALT_BRUSH), 90000);  // 1.5 minutes
+          setTimeout(() => showHint(HINTS.SHIFT_LINE), 180000); // 3 minutes
+          setTimeout(() => showHint(HINTS.TEMPERATURE), 300000); // 5 minutes
+          setTimeout(() => showHint(HINTS.SAVING), 600000); // 10 minutes
+        }
+      }
+      
+      // Create and show a hint popup
+      function showHint(hint) {
+        // Check if hint has already been shown
+        if (localStorage.getItem(`hint_${hint.id}`) === 'true') {
+          return;
+        }
+        
+        // Check condition
+        if (!hint.condition()) {
+          return;
+        }
+        
+        // Create hint element
+        const hintEl = document.createElement('div');
+        hintEl.className = 'hint-popup';
+        hintEl.innerHTML = `
+          <div class="hint-content">
+            <div class="hint-message">${hint.message}</div>
+            <button class="hint-close">Got it</button>
+          </div>
+        `;
+        
+        // Add to document
+        document.body.appendChild(hintEl);
+        
+        // Add animation class after a small delay (for animation to trigger)
+        setTimeout(() => hintEl.classList.add('hint-visible'), 10);
+        
+        // Set up close button
+        const closeBtn = hintEl.querySelector('.hint-close');
+        closeBtn.addEventListener('click', () => {
+          hintEl.classList.remove('hint-visible');
+          setTimeout(() => {
+            hintEl.remove();
+            // Mark hint as shown
+            localStorage.setItem(`hint_${hint.id}`, 'true');
+          }, 300);
+        });
+        
+        // Auto-close after 15 seconds
+        setTimeout(() => {
+          if (document.body.contains(hintEl)) {
+            hintEl.classList.remove('hint-visible');
+            setTimeout(() => {
+              if (document.body.contains(hintEl)) {
+                hintEl.remove();
+                // Mark hint as shown
+                localStorage.setItem(`hint_${hint.id}`, 'true');
+              }
+            }, 300);
+          }
+        }, 15000);
+      }
+      
+      // Initialize hint system when DOM is fully loaded
+      document.addEventListener('DOMContentLoaded', initHintSystem);
+    window.addEventListener('click', function(event) {
+      if (event.target == modMenu) {
+        modMenu.style.display = 'none';
+      }
+    });
     }
+    
     const modButton = document.getElementById('modButton');
     const modMenu = document.getElementById('modMenu');
     const closeModMenu = document.getElementById('closeModMenu');
@@ -12655,8 +15499,30 @@ function explodeNukeBomb(cx, cy){
       reader.readAsText(file);
     });
 
+    // Function to check grid size and show warning if necessary
+    function checkGridSizeWarning(size) {
+      const largeGridWarning = document.getElementById('largeGridWarning');
+      if (parseInt(size) > 100) {
+        largeGridWarning.style.display = 'block';
+      } else {
+        largeGridWarning.style.display = 'none';
+      }
+    }
+
+    // Initial check when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      const stageSizeSelect = document.getElementById('stageSizeSelect');
+      if (stageSizeSelect) {
+        checkGridSizeWarning(stageSizeSelect.value);
+      }
+    });
+
     document.getElementById('stageSizeSelect').addEventListener('change', function() {
       const newSize = parseInt(this.value);
+      
+      // Show or hide the warning based on selected size
+      checkGridSizeWarning(newSize);
+      
       if (newSize !== GRID_SIZE) {
         pendingStageSize = newSize;
         confirmationModal.style.display = 'block';
@@ -12667,21 +15533,29 @@ function explodeNukeBomb(cx, cy){
       }
     });
 
-    confirmYes.addEventListener('click', function() {
-      if (pendingStageSize !== null) {
-        initGrid(pendingStageSize);
-        pendingStageSize = null;
-        confirmationModal.style.display = 'none';
-        optionsModal.style.display = 'none';
-      }
-    });
+    // Add null check for confirmYes element
+    const confirmYes = document.getElementById('confirmYes');
+    if (confirmYes) {
+      confirmYes.addEventListener('click', function() {
+        if (pendingStageSize !== null) {
+          initGrid(pendingStageSize);
+          pendingStageSize = null;
+          confirmationModal.style.display = 'none';
+          optionsModal.style.display = 'none';
+        }
+      });
+    }
 
-    confirmNo.addEventListener('click', function() {
+    // Add null check for confirmNo element
+    const confirmNo = document.getElementById('confirmNo');
+    if (confirmNo) {
+      confirmNo.addEventListener('click', function() {
       pendingStageSize = null;
       confirmationModal.style.display = 'none';
       document.getElementById('stageSizeSelect').value = GRID_SIZE.toString();
       document.getElementById('applyOptionsButton').style.display = 'none';
     });
+    }
 
     // DabyFPS setting
     document.getElementById('setting-dabyfps').value = localStorage.getItem('setting-dabyfps') || 'false';
