@@ -241,6 +241,7 @@
     body.pixel-mode #optionsButton,
     body.pixel-mode #modsButton,
     body.pixel-mode #communityButton,
+    body.pixel-mode #multiplayerButton,
     body.pixel-mode .dropdown {
       border-radius: 0 !important;
       box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5) !important;
@@ -1275,6 +1276,33 @@
     }
     #communityButton:hover {
       background-color: #555;
+    }
+    
+    /* Multiplayer Button Styles */
+    #multiplayerButtonContainer {
+      text-align: center;
+    }
+    #multiplayerButton {
+      background: linear-gradient(135deg, #00b4d8 0%, #0077b6 100%);
+      border: 1px solid #90e0ef;
+      border-radius: 3px;
+      color: #fff;
+      padding: 8px 12px;
+      cursor: pointer;
+      margin: 5px;
+      font-weight: bold;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      transition: all 0.2s ease;
+    }
+    #multiplayerButton:hover {
+      background: linear-gradient(135deg, #0099b8 0%, #005577 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    }
+    #multiplayerButton:active {
+      transform: translateY(0);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
     }
     /* Modal styles - updated to match blue modern UI scheme */
     .modal {
@@ -7980,6 +8008,10 @@
       <div id="modButtonContainer">
         <button id="modButton">Mods</button>
       </div>
+      
+      <div id="multiplayerButtonContainer">
+        <button id="multiplayerButton">Multiplayer (BETA)</button>
+      </div>
     </div>
   </div>
 
@@ -14299,8 +14331,8 @@ function playPlacementSound(elementType) {
       // Handle user input
       spamPlace();
       
-      // Check if simulation is paused
-      if (speed > 0) {
+      // Check if simulation is paused and if local simulation is enabled
+      if (speed > 0 && localGameLoopEnabled) {
         // Convert real time to simulation time
         // This is the key part - we accumulate time based on real elapsed milliseconds
         const simulationTimeToAdd = (deltaTime / 1000) * (speed / 0.80);
@@ -14340,6 +14372,10 @@ function playPlacementSound(elementType) {
         if (stepAccumulator > fixedTimeStep * 10) {
           stepAccumulator = fixedTimeStep * 10;
         }
+      } else if (!localGameLoopEnabled) {
+        // In multiplayer mode, still mark cells as dirty for rendering
+        // but don't run physics (host handles that)
+        markAllCellsAsDirty();
       }
       
       updateHUD();
@@ -22893,6 +22929,112 @@ window.forcedModInfo = {<br>
     </div>
   </div>
 
+  <!-- Multiplayer Modal -->
+  <div id="multiplayerModal" class="modal">
+    <div class="modal-content">
+      <span id="closeMultiplayerModal" class="close">&times;</span>
+      <h2>🎮 Multiplayer (BETA)</h2>
+      
+      <div id="multiplayerConnectionScreen">
+        <div style="background: #2a3a5f; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+          <h3 style="color: #00b4d8; margin-top: 0;">⚠️ Beta Warning</h3>
+          <p>Multiplayer is in BETA. Features may be unstable and your experience may vary.</p>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+          <label for="multiplayerServerUrl">Server URL:</label>
+          <input type="text" id="multiplayerServerUrl" placeholder="ws://localhost:8080" value="ws://localhost:8080" />
+          <small style="color: #aaa; display: block; margin-top: 5px;">
+            Enter the WebSocket URL of the multiplayer server
+          </small>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+          <label for="multiplayerUsername">Username:</label>
+          <input type="text" id="multiplayerUsername" placeholder="Your username" maxlength="20" />
+          <small style="color: #aaa; display: block; margin-top: 5px;">
+            2-20 characters, letters/numbers/underscore/hyphen only
+          </small>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+          <label for="multiplayerRoomId">Room ID:</label>
+          <input type="text" id="multiplayerRoomId" placeholder="room-name" maxlength="30" />
+          <small style="color: #aaa; display: block; margin-top: 5px;">
+            Room will be created if it doesn't exist
+          </small>
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+          <label for="multiplayerRoomPassword">Room Password (Optional):</label>
+          <input type="password" id="multiplayerRoomPassword" placeholder="Leave empty for public room" />
+        </div>
+        
+        <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+          <button id="connectMultiplayerBtn" style="background: #00b4d8; flex: 1;">Connect to Room</button>
+          <button id="browseRoomsBtn" style="background: #555;">Browse Public Rooms</button>
+        </div>
+        
+        <div id="multiplayerStatus" style="padding: 10px; border-radius: 5px; margin-bottom: 10px; display: none;">
+          <span id="multiplayerStatusText"></span>
+        </div>
+      </div>
+      
+      <div id="multiplayerGameScreen" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <div>
+            <h3 style="margin: 0; color: #00b4d8;">Connected to Room: <span id="currentRoomName"></span></h3>
+            <p style="margin: 5px 0; color: #aaa;">Players: <span id="playerCount">0</span>/8</p>
+          </div>
+          <button id="disconnectMultiplayerBtn" style="background: #ff4444;">Disconnect</button>
+        </div>
+        
+        <div style="background: #2a3a5f; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+          <h4 style="margin-top: 0;">Players in Room:</h4>
+          <div id="playersList"></div>
+        </div>
+        
+        <div style="background: #2a3a5f; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+          <h4 style="margin-top: 0;">Chat:</h4>
+          <div id="multiplayerChat" style="height: 150px; overflow-y: auto; background: #1a1a2e; padding: 10px; border-radius: 5px; margin-bottom: 10px; font-family: monospace; font-size: 12px;"></div>
+          <div style="display: flex; gap: 10px;">
+            <input type="text" id="chatInput" placeholder="Type a message..." style="flex: 1;" maxlength="200" />
+            <button id="sendChatBtn">Send</button>
+          </div>
+        </div>
+        
+        <div style="background: #2a3a5f; padding: 15px; border-radius: 8px;">
+          <h4 style="margin-top: 0;">How Multiplayer Works:</h4>
+          <ul style="margin: 0; padding-left: 20px; color: #ccc;">
+            <li>Host runs the physics simulation and sends updates to all players</li>
+            <li>Players send input commands to the host for processing</li>
+            <li>All element placements are processed by the host in real-time</li>
+            <li>Chat with other players using the chat box</li>
+            <li>Only the room host can clear the grid</li>
+          </ul>
+          <div style="margin-top: 15px;">
+            <button id="clearGridBtn" style="background: #ff4444; display: none;">Clear Grid (Host Only)</button>
+          </div>
+        </div>
+      </div>
+      
+      <div id="roomBrowserScreen" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <h3 style="margin: 0;">Public Rooms</h3>
+          <button id="backToConnectionBtn">Back</button>
+        </div>
+        
+        <div id="publicRoomsList" style="max-height: 300px; overflow-y: auto;">
+          <!-- Public rooms will be listed here -->
+        </div>
+        
+        <div style="text-align: center; margin-top: 15px;">
+          <button id="refreshRoomsBtn">Refresh List</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     // Load saved font preference when page loads
     document.addEventListener('DOMContentLoaded', function() {
@@ -25837,6 +25979,685 @@ window.forcedModInfo = {<br>
 
     // Start the game loop
     requestAnimationFrame(gameLoop);
+
+    // ===============================
+    // MULTIPLAYER FUNCTIONALITY
+    // ===============================
+    
+    let multiplayerWebSocket = null;
+    let isMultiplayerConnected = false;
+    let currentMultiplayerRoom = null;
+    let multiplayerUsername = null;
+    let isHost = false;
+    let lastSentGridUpdate = Date.now();
+    let localGameLoopEnabled = true;
+    
+    // Message types for WebSocket communication
+    const MultiplayerMessageTypes = {
+      JOIN_ROOM: 'join_room',
+      LEAVE_ROOM: 'leave_room',
+      ROOM_JOINED: 'room_joined',
+      ROOM_LEFT: 'room_left',
+      PLAYER_JOINED: 'player_joined',
+      PLAYER_LEFT: 'player_left',
+      ERROR: 'error',
+      PLAYER_INPUT: 'player_input',
+      GAME_STATE: 'game_state',
+      CHAT_MESSAGE: 'chat_message',
+      ROOM_LIST: 'room_list',
+      CREATE_ROOM: 'create_room',
+      ROOM_CREATED: 'room_created',
+      HOST_STATE_UPDATE: 'host_state_update'
+    };
+
+    // Initialize multiplayer UI
+    function initMultiplayerUI() {
+      const multiplayerButton = document.getElementById('multiplayerButton');
+      const multiplayerModal = document.getElementById('multiplayerModal');
+      const closeMultiplayerModal = document.getElementById('closeMultiplayerModal');
+      
+      // Show multiplayer modal
+      multiplayerButton.addEventListener('click', function() {
+        multiplayerModal.style.display = 'block';
+        showMultiplayerScreen('connection');
+      });
+      
+      // Close multiplayer modal
+      closeMultiplayerModal.addEventListener('click', function() {
+        multiplayerModal.style.display = 'none';
+      });
+      
+      // Close modal when clicking outside
+      multiplayerModal.addEventListener('click', function(e) {
+        if (e.target === multiplayerModal) {
+          multiplayerModal.style.display = 'none';
+        }
+      });
+      
+      // Connect button
+      document.getElementById('connectMultiplayerBtn').addEventListener('click', connectToMultiplayer);
+      
+      // Browse rooms button
+      document.getElementById('browseRoomsBtn').addEventListener('click', function() {
+        showMultiplayerScreen('browser');
+        refreshRoomList();
+      });
+      
+      // Back to connection button
+      document.getElementById('backToConnectionBtn').addEventListener('click', function() {
+        showMultiplayerScreen('connection');
+      });
+      
+      // Refresh rooms button
+      document.getElementById('refreshRoomsBtn').addEventListener('click', refreshRoomList);
+      
+      // Disconnect button
+      document.getElementById('disconnectMultiplayerBtn').addEventListener('click', disconnectFromMultiplayer);
+      
+      // Chat functionality
+      const chatInput = document.getElementById('chatInput');
+      const sendChatBtn = document.getElementById('sendChatBtn');
+      
+      sendChatBtn.addEventListener('click', sendChatMessage);
+      chatInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          sendChatMessage();
+        }
+      });
+      
+      // Clear grid functionality (host only)
+      const clearGridBtn = document.getElementById('clearGridBtn');
+      clearGridBtn.addEventListener('click', function() {
+        if (!isHost) return; // Only hosts can clear
+        
+        if (confirm('Clear the entire grid? This cannot be undone.')) {
+          if (isMultiplayerConnected && multiplayerWebSocket && 
+              multiplayerWebSocket.readyState === WebSocket.OPEN) {
+            // In multiplayer: send clear command to server
+            const inputMessage = {
+              type: MultiplayerMessageTypes.PLAYER_INPUT,
+              inputType: 'clear'
+            };
+            multiplayerWebSocket.send(JSON.stringify(inputMessage));
+          } else {
+            // Single player: clear locally
+            for (let y = 0; y < GRID_SIZE; y++) {
+              for (let x = 0; x < GRID_SIZE; x++) {
+                grid[y][x] = 0;
+                temp[y][x] = 20;
+              }
+            }
+          }
+        }
+      });
+      
+      // Load saved server URL and username
+      const savedServerUrl = localStorage.getItem('multiplayerServerUrl');
+      const savedUsername = localStorage.getItem('multiplayerUsername');
+      
+      if (savedServerUrl) {
+        document.getElementById('multiplayerServerUrl').value = savedServerUrl;
+      }
+      if (savedUsername) {
+        document.getElementById('multiplayerUsername').value = savedUsername;
+      }
+    }
+
+    function showMultiplayerScreen(screen) {
+      // Hide all screens
+      document.getElementById('multiplayerConnectionScreen').style.display = 'none';
+      document.getElementById('multiplayerGameScreen').style.display = 'none';
+      document.getElementById('roomBrowserScreen').style.display = 'none';
+      
+      // Show selected screen
+      if (screen === 'connection') {
+        document.getElementById('multiplayerConnectionScreen').style.display = 'block';
+      } else if (screen === 'game') {
+        document.getElementById('multiplayerGameScreen').style.display = 'block';
+      } else if (screen === 'browser') {
+        document.getElementById('roomBrowserScreen').style.display = 'block';
+      }
+    }
+
+    function showMultiplayerStatus(message, type = 'info') {
+      const statusDiv = document.getElementById('multiplayerStatus');
+      const statusText = document.getElementById('multiplayerStatusText');
+      
+      statusText.textContent = message;
+      statusDiv.style.display = 'block';
+      
+      // Set background color based on type
+      if (type === 'error') {
+        statusDiv.style.backgroundColor = '#ff4444';
+        statusDiv.style.color = 'white';
+      } else if (type === 'success') {
+        statusDiv.style.backgroundColor = '#44ff44';
+        statusDiv.style.color = 'black';
+      } else {
+        statusDiv.style.backgroundColor = '#4444ff';
+        statusDiv.style.color = 'white';
+      }
+      
+      // Auto-hide after 5 seconds for non-error messages
+      if (type !== 'error') {
+        setTimeout(() => {
+          statusDiv.style.display = 'none';
+        }, 5000);
+      }
+    }
+
+    function connectToMultiplayer() {
+      const serverUrl = document.getElementById('multiplayerServerUrl').value.trim();
+      const username = document.getElementById('multiplayerUsername').value.trim();
+      const roomId = document.getElementById('multiplayerRoomId').value.trim();
+      const password = document.getElementById('multiplayerRoomPassword').value;
+      
+      // Validation
+      if (!serverUrl) {
+        showMultiplayerStatus('Please enter a server URL', 'error');
+        return;
+      }
+      
+      if (!username || username.length < 2 || username.length > 20) {
+        showMultiplayerStatus('Username must be 2-20 characters', 'error');
+        return;
+      }
+      
+      if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+        showMultiplayerStatus('Username can only contain letters, numbers, underscores, and hyphens', 'error');
+        return;
+      }
+      
+      if (!roomId || roomId.length < 1 || roomId.length > 30) {
+        showMultiplayerStatus('Room ID must be 1-30 characters', 'error');
+        return;
+      }
+      
+      // Save credentials
+      localStorage.setItem('multiplayerServerUrl', serverUrl);
+      localStorage.setItem('multiplayerUsername', username);
+      
+      showMultiplayerStatus('Connecting to server...', 'info');
+      
+      try {
+        multiplayerWebSocket = new WebSocket(serverUrl);
+        
+        multiplayerWebSocket.onopen = function() {
+          showMultiplayerStatus('Connected! Joining room...', 'info');
+          
+          // Send join room request
+          const joinMessage = {
+            type: MultiplayerMessageTypes.JOIN_ROOM,
+            roomId: roomId,
+            username: username,
+            password: password || undefined
+          };
+          
+          multiplayerWebSocket.send(JSON.stringify(joinMessage));
+        };
+        
+        multiplayerWebSocket.onmessage = handleMultiplayerMessage;
+        
+        multiplayerWebSocket.onclose = function() {
+          if (isMultiplayerConnected) {
+            showMultiplayerStatus('Connection lost', 'error');
+            disconnectFromMultiplayer();
+          } else {
+            showMultiplayerStatus('Failed to connect to server', 'error');
+          }
+        };
+        
+        multiplayerWebSocket.onerror = function() {
+          showMultiplayerStatus('Connection error. Check the server URL.', 'error');
+        };
+        
+      } catch (error) {
+        showMultiplayerStatus('Invalid server URL', 'error');
+      }
+    }
+
+    function handleMultiplayerMessage(event) {
+      try {
+        const data = JSON.parse(event.data);
+        
+        switch (data.type) {
+          case MultiplayerMessageTypes.ROOM_JOINED:
+            handleRoomJoined(data);
+            break;
+            
+          case MultiplayerMessageTypes.PLAYER_JOINED:
+            handlePlayerJoined(data);
+            break;
+            
+          case MultiplayerMessageTypes.PLAYER_LEFT:
+            handlePlayerLeft(data);
+            break;
+            
+          case MultiplayerMessageTypes.GAME_STATE:
+            handleGameState(data);
+            break;
+            
+          case MultiplayerMessageTypes.CHAT_MESSAGE:
+            handleChatMessage(data);
+            break;
+            
+          case MultiplayerMessageTypes.ROOM_LIST:
+            handleRoomList(data);
+            break;
+            
+          case MultiplayerMessageTypes.ERROR:
+            showMultiplayerStatus(data.message, 'error');
+            break;
+            
+          case MultiplayerMessageTypes.PLAYER_INPUT:
+            // Host receives inputs from other players
+            if (isHost) {
+              handleRemotePlayerInput(data);
+            }
+            break;
+            
+          default:
+            console.warn('Unknown multiplayer message type:', data.type);
+        }
+      } catch (error) {
+        console.error('Error handling multiplayer message:', error);
+      }
+    }
+
+    function handleRoomJoined(data) {
+      isMultiplayerConnected = true;
+      currentMultiplayerRoom = data.roomId;
+      multiplayerUsername = data.username;
+      isHost = data.isHost;
+      
+      // Only disable local physics for non-hosts
+      // Host continues to run physics locally for better performance
+      localGameLoopEnabled = isHost;
+      
+      showMultiplayerStatus('Successfully joined room!', 'success');
+      showMultiplayerScreen('game');
+      
+      // Update UI
+      document.getElementById('currentRoomName').textContent = data.roomId;
+      updatePlayersList(data.players);
+      
+      // Add chat message
+      addChatMessage('System', `Welcome to room ${data.roomId}!`, true);
+      if (isHost) {
+        addChatMessage('System', 'You are the room host. Your client is running the simulation.', true);
+        // Show clear grid button for host
+        document.getElementById('clearGridBtn').style.display = 'block';
+        // Start broadcasting game state
+        startHostBroadcast();
+      } else {
+        addChatMessage('System', 'Connected as client. The host is running the simulation.', true);
+        // Hide clear grid button for non-hosts
+        document.getElementById('clearGridBtn').style.display = 'none';
+      }
+    }
+
+    function handlePlayerJoined(data) {
+      updatePlayersList(data.players); // Refresh player list with updated data
+      addChatMessage('System', `${data.username} joined the room`, true);
+      
+      // Check if we became host (when original host leaves)
+      if (data.players) {
+        const ourPlayer = data.players.find(p => p.username === multiplayerUsername);
+        if (ourPlayer && ourPlayer.isHost && !isHost) {
+          isHost = true;
+          localGameLoopEnabled = true; // Enable physics for new host
+          document.getElementById('clearGridBtn').style.display = 'block';
+          addChatMessage('System', 'You are now the room host!', true);
+          startHostBroadcast(); // Start broadcasting state
+        }
+      }
+    }
+
+    function handlePlayerLeft(data) {
+      updatePlayersList(data.players); // Refresh player list with updated data
+      addChatMessage('System', `${data.username} left the room`, true);
+      
+      // Check if we became host (when original host leaves)
+      if (data.players) {
+        const ourPlayer = data.players.find(p => p.username === multiplayerUsername);
+        if (ourPlayer && ourPlayer.isHost && !isHost) {
+          isHost = true;
+          localGameLoopEnabled = true; // Enable physics for new host
+          document.getElementById('clearGridBtn').style.display = 'block';
+          addChatMessage('System', 'You are now the room host!', true);
+          startHostBroadcast(); // Start broadcasting state
+        }
+      }
+    }
+
+    function handleGameState(data) {
+      // Receive complete game state from host (only for non-host clients)
+      if (!isHost && data.grid && data.temp) {
+        for (let y = 0; y < Math.min(GRID_SIZE, data.grid.length); y++) {
+          for (let x = 0; x < Math.min(GRID_SIZE, data.grid[y].length); x++) {
+            grid[y][x] = data.grid[y][x];
+            temp[y][x] = data.temp[y][x];
+            // Mark cells as dirty for rendering
+            if (cellsDirty && cellsDirty[y]) {
+              cellsDirty[y][x] = true;
+            }
+          }
+        }
+        
+        // Clear moved array since we got fresh state
+        for (let y = 0; y < GRID_SIZE; y++) {
+          for (let x = 0; x < GRID_SIZE; x++) {
+            moved[y][x] = false;
+          }
+        }
+      }
+    }
+
+    function handleChatMessage(data) {
+      addChatMessage(data.username, data.message, false);
+    }
+
+    function handleRemotePlayerInput(data) {
+      // Host processes inputs from other players
+      if (!isHost) return;
+      
+      if (data.inputType === 'place') {
+        // Use the brush size from the remote player
+        const originalBrushSize = strokeThickness;
+        strokeThickness = data.brushSize || 1;
+        placeElementAt(data.x, data.y, data.element);
+        strokeThickness = originalBrushSize;
+      } else if (data.inputType === 'erase') {
+        const originalBrushSize = strokeThickness;
+        strokeThickness = data.brushSize || 1;
+        eraseCell(data.x, data.y);
+        strokeThickness = originalBrushSize;
+      } else if (data.inputType === 'clear') {
+        // Only allow clear from other players if they were previously host
+        // For now, we'll skip this since only host can clear
+      }
+    }
+
+    function handleRoomList(data) {
+      const roomsList = document.getElementById('publicRoomsList');
+      roomsList.innerHTML = '';
+      
+      if (data.rooms.length === 0) {
+        roomsList.innerHTML = '<p style="text-align: center; color: #aaa;">No public rooms available</p>';
+        return;
+      }
+      
+      data.rooms.forEach(room => {
+        const roomDiv = document.createElement('div');
+        roomDiv.style.cssText = `
+          background: #333;
+          border: 1px solid #555;
+          border-radius: 5px;
+          padding: 15px;
+          margin-bottom: 10px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        `;
+        
+        roomDiv.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <h4 style="margin: 0 0 5px 0; color: #00b4d8;">${room.id}</h4>
+              <p style="margin: 0; color: #aaa; font-size: 14px;">Host: ${room.host}</p>
+              <p style="margin: 5px 0 0 0; color: #ccc; font-size: 12px;">
+                Players: ${room.playerCount}/${room.maxPlayers} | 
+                Created: ${new Date(room.createdAt).toLocaleTimeString()}
+              </p>
+            </div>
+            <button onclick="joinPublicRoom('${room.id}')" style="
+              background: #00b4d8;
+              color: white;
+              border: none;
+              border-radius: 5px;
+              padding: 8px 16px;
+              cursor: pointer;
+            ">Join</button>
+          </div>
+        `;
+        
+        roomDiv.addEventListener('mouseenter', function() {
+          this.style.backgroundColor = '#444';
+          this.style.borderColor = '#777';
+        });
+        
+        roomDiv.addEventListener('mouseleave', function() {
+          this.style.backgroundColor = '#333';
+          this.style.borderColor = '#555';
+        });
+        
+        roomsList.appendChild(roomDiv);
+      });
+    }
+
+    function updatePlayersList(players) {
+      const playersList = document.getElementById('playersList');
+      const playerCount = document.getElementById('playerCount');
+      
+      if (players) {
+        playersList.innerHTML = '';
+        
+        players.forEach(player => {
+          const playerDiv = document.createElement('div');
+          playerDiv.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 5px 0;
+            border-bottom: 1px solid #444;
+          `;
+          
+          playerDiv.innerHTML = `
+            <div style="
+              width: 20px;
+              height: 20px;
+              border-radius: 50%;
+              background-color: ${player.color};
+            "></div>
+            <span style="color: ${player.color}; font-weight: bold;">
+              ${player.username}${player.isHost ? ' (Host)' : ''}
+            </span>
+          `;
+          
+          playersList.appendChild(playerDiv);
+        });
+        
+        playerCount.textContent = players.length;
+      }
+    }
+
+    function addChatMessage(username, message, isSystem = false) {
+      const chatDiv = document.getElementById('multiplayerChat');
+      const messageDiv = document.createElement('div');
+      
+      const timestamp = new Date().toLocaleTimeString();
+      
+      if (isSystem) {
+        messageDiv.innerHTML = `
+          <span style="color: #888;">[${timestamp}] </span>
+          <span style="color: #ffaa00; font-style: italic;">${message}</span>
+        `;
+      } else {
+        messageDiv.innerHTML = `
+          <span style="color: #888;">[${timestamp}] </span>
+          <span style="color: #00b4d8; font-weight: bold;">${username}:</span>
+          <span style="color: #fff;"> ${message}</span>
+        `;
+      }
+      
+      chatDiv.appendChild(messageDiv);
+      chatDiv.scrollTop = chatDiv.scrollHeight;
+    }
+
+    function sendChatMessage() {
+      const chatInput = document.getElementById('chatInput');
+      const message = chatInput.value.trim();
+      
+      if (!message || !isMultiplayerConnected) return;
+      
+      const chatMessage = {
+        type: MultiplayerMessageTypes.CHAT_MESSAGE,
+        message: message
+      };
+      
+      multiplayerWebSocket.send(JSON.stringify(chatMessage));
+      chatInput.value = '';
+    }
+
+    function refreshRoomList() {
+      if (!multiplayerWebSocket || multiplayerWebSocket.readyState !== WebSocket.OPEN) {
+        showMultiplayerStatus('Not connected to server', 'error');
+        return;
+      }
+      
+      const requestMessage = {
+        type: MultiplayerMessageTypes.ROOM_LIST
+      };
+      
+      multiplayerWebSocket.send(JSON.stringify(requestMessage));
+    }
+
+    function joinPublicRoom(roomId) {
+      document.getElementById('multiplayerRoomId').value = roomId;
+      document.getElementById('multiplayerRoomPassword').value = '';
+      showMultiplayerScreen('connection');
+      connectToMultiplayer();
+    }
+
+    function disconnectFromMultiplayer() {
+      if (multiplayerWebSocket) {
+        multiplayerWebSocket.close();
+      }
+      
+      // Stop broadcasting if we were host
+      stopHostBroadcast();
+      
+      isMultiplayerConnected = false;
+      currentMultiplayerRoom = null;
+      multiplayerUsername = null;
+      isHost = false;
+      
+      // Re-enable local physics simulation
+      localGameLoopEnabled = true;
+      
+      showMultiplayerScreen('connection');
+      showMultiplayerStatus('Disconnected from multiplayer', 'info');
+    }
+
+    // Host state broadcasting interval
+    let hostBroadcastInterval = null;
+    
+    // Function to send complete game state from host to server
+    function sendHostGameState() {
+      if (isHost && isMultiplayerConnected && multiplayerWebSocket && 
+          multiplayerWebSocket.readyState === WebSocket.OPEN) {
+        
+        const stateMessage = {
+          type: MultiplayerMessageTypes.HOST_STATE_UPDATE,
+          grid: grid,
+          temp: temp,
+          timestamp: Date.now()
+        };
+        
+        multiplayerWebSocket.send(JSON.stringify(stateMessage));
+      }
+    }
+    
+    // Start broadcasting host state when becoming host
+    function startHostBroadcast() {
+      if (hostBroadcastInterval) {
+        clearInterval(hostBroadcastInterval);
+      }
+      
+      // Send complete state 20 times per second
+      hostBroadcastInterval = setInterval(sendHostGameState, 50);
+    }
+    
+    // Stop broadcasting when no longer host
+    function stopHostBroadcast() {
+      if (hostBroadcastInterval) {
+        clearInterval(hostBroadcastInterval);
+        hostBroadcastInterval = null;
+      }
+    }
+
+    // Override placeElementAt to send input to host
+    const originalPlaceElementAt = placeElementAt;
+    placeElementAt = function(x, y, tool) {
+      // If multiplayer connected, handle differently for host vs clients
+      if (isMultiplayerConnected && multiplayerWebSocket && 
+          multiplayerWebSocket.readyState === WebSocket.OPEN) {
+        
+        if (isHost) {
+          // Host: just process locally, state will be sent in broadcast
+          originalPlaceElementAt(x, y, tool);
+        } else {
+          // Client: only send input to host, don't process locally
+          // Throttle inputs to prevent spam
+          const now = Date.now();
+          if (now - lastSentGridUpdate > 50) { // Max 20 inputs per second
+            const inputMessage = {
+              type: MultiplayerMessageTypes.PLAYER_INPUT,
+              inputType: 'place',
+              x: x,
+              y: y,
+              element: tool,
+              brushSize: strokeThickness
+            };
+            
+            multiplayerWebSocket.send(JSON.stringify(inputMessage));
+            lastSentGridUpdate = now;
+          }
+        }
+      } else {
+        // Single player mode - process locally
+        originalPlaceElementAt(x, y, tool);
+      }
+    };
+
+    // Override eraseCell to send input to host
+    const originalEraseCell = eraseCell;
+    eraseCell = function(x, y) {
+      // If multiplayer connected, handle differently for host vs clients
+      if (isMultiplayerConnected && multiplayerWebSocket && 
+          multiplayerWebSocket.readyState === WebSocket.OPEN) {
+        
+        if (isHost) {
+          // Host: just process locally, state will be sent in broadcast
+          originalEraseCell(x, y);
+        } else {
+          // Client: only send input to host, don't process locally
+          const now = Date.now();
+          if (now - lastSentGridUpdate > 50) {
+            const inputMessage = {
+              type: MultiplayerMessageTypes.PLAYER_INPUT,
+              inputType: 'erase',
+              x: x,
+              y: y,
+              brushSize: strokeThickness
+            };
+            
+            multiplayerWebSocket.send(JSON.stringify(inputMessage));
+            lastSentGridUpdate = now;
+          }
+        }
+      } else {
+        // Single player mode - process locally
+        originalEraseCell(x, y);
+      }
+    };
+
+    // Initialize multiplayer UI when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+      initMultiplayerUI();
+    });
+
+    // Make joinPublicRoom available globally
+    window.joinPublicRoom = joinPublicRoom;
   </script>
 
   <script>
