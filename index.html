@@ -22943,9 +22943,9 @@ window.forcedModInfo = {<br>
         
         <div style="margin-bottom: 20px;">
           <label for="multiplayerServerUrl">Server URL:</label>
-          <input type="text" id="multiplayerServerUrl" placeholder="ws://192.168.1.100:8080 or ws://server.com:8080" value="ws://localhost:8080" />
+          <input type="text" id="multiplayerServerUrl" placeholder="ws://192.168.1.100:8080 or ws://server.com:8080" value="" />
           <small style="color: #aaa; display: block; margin-top: 5px;">
-            Enter the WebSocket URL (e.g., ws://localhost:8080, ws://192.168.1.100:8080, ws://server.com:8080)
+            Enter the WebSocket URL (e.g., ws://localhost:8080, ws://192.168.1.100:8080, ws://play.breadgames.online:25500)
           </small>
         </div>
         
@@ -26097,6 +26097,9 @@ window.forcedModInfo = {<br>
       
       if (savedServerUrl) {
         document.getElementById('multiplayerServerUrl').value = savedServerUrl;
+      } else {
+        // Set default to empty so user can enter any URL
+        document.getElementById('multiplayerServerUrl').value = '';
       }
       if (savedUsername) {
         document.getElementById('multiplayerUsername').value = savedUsername;
@@ -26180,6 +26183,18 @@ window.forcedModInfo = {<br>
       showMultiplayerStatus('Connecting to server...', 'info');
       
       try {
+        // Validate URL format
+        try {
+          const url = new URL(serverUrl);
+          if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
+            showMultiplayerStatus('URL must start with ws:// or wss://', 'error');
+            return;
+          }
+        } catch (urlError) {
+          showMultiplayerStatus('Invalid URL format. Use ws://hostname:port or wss://hostname:port', 'error');
+          return;
+        }
+        
         multiplayerWebSocket = new WebSocket(serverUrl);
         
         multiplayerWebSocket.onopen = function() {
@@ -26198,21 +26213,23 @@ window.forcedModInfo = {<br>
         
         multiplayerWebSocket.onmessage = handleMultiplayerMessage;
         
-        multiplayerWebSocket.onclose = function() {
+        multiplayerWebSocket.onclose = function(event) {
           if (isMultiplayerConnected) {
             showMultiplayerStatus('Connection lost', 'error');
             disconnectFromMultiplayer();
           } else {
-            showMultiplayerStatus('Failed to connect to server', 'error');
+            showMultiplayerStatus(`Failed to connect to server (Code: ${event.code})`, 'error');
           }
         };
         
-        multiplayerWebSocket.onerror = function() {
-          showMultiplayerStatus('Connection error. Check the server URL.', 'error');
+        multiplayerWebSocket.onerror = function(error) {
+          console.error('WebSocket error:', error);
+          showMultiplayerStatus('Connection error. Make sure the server is running and accessible.', 'error');
         };
         
       } catch (error) {
-        showMultiplayerStatus('Invalid server URL', 'error');
+        console.error('WebSocket creation error:', error);
+        showMultiplayerStatus(`Error: ${error.message || 'Invalid server URL'}`, 'error');
       }
     }
 
